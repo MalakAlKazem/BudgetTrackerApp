@@ -118,9 +118,6 @@ const HomeScreen: React.FC = () => {
           </View>
         </View>
 
-        <TouchableOpacity style={styles.addButton}>
-          <Ionicons name="add" size={32} color="white" />
-        </TouchableOpacity>
       </ScrollView>
     </View>
   );

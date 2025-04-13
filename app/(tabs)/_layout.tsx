@@ -1,15 +1,53 @@
 import { Tabs } from 'expo-router';
-import React from 'react';
-import { Platform, View, StyleSheet } from 'react-native';
-
+import React, { useState, useEffect } from 'react';
+import { Platform, View, StyleSheet, Keyboard } from 'react-native';
+import * as NavigationBar from 'expo-navigation-bar'; // Import the navigation bar module
 import { HapticTab } from '@/components/HapticTab';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { Ionicons } from '@expo/vector-icons';
 
 const PRIMARY_COLOR = '#4D9F8D';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const [hideTabBar, setHideTabBar] = useState(false);
+
+  useEffect(() => {
+    let hideInterval: NodeJS.Timeout;
+
+    const hideNavigationBar = async () => {
+      try {
+        // Set immersive mode first for better results
+        // await NavigationBar.setBehaviorAsync('overlay');
+        await NavigationBar.setVisibilityAsync('hidden');
+      } catch (error) {
+        console.warn('NavigationBar error:', error);
+      }
+    };
+
+    // Immediate hide
+    hideNavigationBar();
+
+    // Continuous hiding (every 2 seconds)
+    hideInterval = setInterval(hideNavigationBar, 3000);
+
+    const keyboardDidShow = Keyboard.addListener('keyboardDidShow', () => {
+      setHideTabBar(true);
+      hideNavigationBar();
+    });
+
+    const keyboardDidHide = Keyboard.addListener('keyboardDidHide', () => {
+      setHideTabBar(false);
+      hideNavigationBar();
+    });
+
+    return () => {
+      clearInterval(hideInterval);
+      keyboardDidShow.remove();
+      keyboardDidHide.remove();
+    };
+  }, []);
 
   return (
     <Tabs
@@ -19,6 +57,7 @@ export default function TabLayout() {
         tabBarStyle: [
           styles.tabBar,
           Platform.OS === 'ios' && styles.iosTabBar,
+          hideTabBar && { display: 'none' }, // Conditionally hide the tab bar
         ],
         tabBarActiveTintColor: PRIMARY_COLOR,
         tabBarInactiveTintColor: '#ccc',
@@ -47,13 +86,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="budget"
+        name="AddBudget"
         options={{
           title: '',
           tabBarIcon: ({ color }) => (
             <View style={styles.budgetButtonContainer}>
               <View style={styles.budgetButton}>
-                <IconSymbol size={30} name="dollarsign.circle.fill" color="#fff" />
+                <Ionicons size={30} name="add" color="#fff" />
               </View>
             </View>
           ),
