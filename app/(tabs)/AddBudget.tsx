@@ -9,6 +9,7 @@ import {
   Dimensions,
   Platform,
   Keyboard,
+  Button,
   ScrollView,
   KeyboardAvoidingView,
   TouchableWithoutFeedback,
@@ -27,6 +28,8 @@ const AddBudget = () => {
   const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
   const [invoiceImage, setInvoiceImage] = useState<string | null>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [type, setType] = useState<'income' | 'expense'>('expense');
+
 
   useEffect(() => {
     const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
@@ -38,13 +41,14 @@ const AddBudget = () => {
   }, []);
 
   const handleAddExpense = () => {
-    console.log({ name, amount, date, invoiceImage });
+    console.log({ name, amount, date, invoiceImage, type });
 
     // Clear the form
     setName('');
     setAmount('');
     setDate(new Date());
     setInvoiceImage(null);
+    setType('expense'); // reset to default
 
     router.back();
   };
@@ -92,10 +96,10 @@ const AddBudget = () => {
           </View>
 
           {!keyboardVisible && (
-            <View style={styles.header}>
-              <Text style={styles.headerText}>Add Expense</Text>
-            </View>
-          )}
+  <View style={styles.header}>
+    <Text style={styles.headerText}>Add {type === 'income' ? 'Income' : 'Expense'}</Text>
+  </View>
+)}
 
           <ScrollView
             contentContainerStyle={styles.formWrapper}
@@ -103,6 +107,23 @@ const AddBudget = () => {
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.formContainer}>
+
+            <View style={styles.toggleContainer}>
+  <TouchableOpacity
+    style={[styles.toggleButton, type === 'expense' && styles.selectedToggle]}
+    onPress={() => setType('expense')}
+  >
+    <Text style={[styles.toggleText, type === 'expense' && styles.selectedText]}>Expense</Text>
+  </TouchableOpacity>
+  <TouchableOpacity
+    style={[styles.toggleButton, type === 'income' && styles.selectedToggle]}
+    onPress={() => setType('income')}
+  >
+    <Text style={[styles.toggleText, type === 'income' && styles.selectedText]}>Income</Text>
+  </TouchableOpacity>
+</View>
+
+
               {/* Name */}
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>NAME</Text>
@@ -234,6 +255,32 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     fontSize: 16,
   },
+  toggleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginBottom: 30,
+  },
+  toggleButton: {
+    flex: 1,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#4D9F8D',
+    borderRadius: 5,
+    marginHorizontal: 5,
+    alignItems: 'center',
+  },
+  selectedToggle: {
+    backgroundColor: '#4D9F8D',
+  },
+  toggleText: {
+    fontSize: 16,
+    color: '#4D9F8D',
+  },
+  selectedText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  
   amountContainer: {
     flexDirection: 'row',
     alignItems: 'center',
