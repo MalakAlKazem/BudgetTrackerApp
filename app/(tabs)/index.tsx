@@ -12,7 +12,8 @@ import {
 } from 'react-native';
 import { Ionicons} from '@expo/vector-icons';
 import { FontAwesome5 } from '@expo/vector-icons';
-
+import { useTransactions } from '@/app/context/TransactionContext';
+import { useRouter } from 'expo-router';
 
 const { width, height } = Dimensions.get('window');
 
@@ -24,14 +25,6 @@ type Transaction = {
   icon: any;
   color: string;
 };
-
-const transactions: Transaction[] = [
-  { id: '1', name: 'Upwork', amount: '+ $850.00', date: 'Today', icon: require('@/assets/upwork.png'), color: '#4CAF50' },
-  { id: '2', name: 'Transfer', amount: '- $85.00', date: 'Yesterday', icon: require('@/assets/transfer.png'), color: '#F44336' },
-  { id: '3', name: 'Paypal', amount: '+ $1,406.00', date: 'Jan 30, 2022', icon: require('@/assets/paypal.png'), color: '#4CAF50' },
-  { id: '4', name: 'Youtube', amount: '- $11.99', date: 'Jan 16, 2022', icon: require('@/assets/youtube.png'), color: '#F44336' },
-];
-
 type CategoryItemProps = {
   title: string;
   icon: string;
@@ -45,7 +38,24 @@ const CategoryItem: React.FC<CategoryItemProps> = ({ title, icon }) => (
 );
 
 const HomeScreen: React.FC = () => {
-  const renderItem: ListRenderItem<Transaction> = ({ item }) => (
+  const router = useRouter();
+  const { transactions, getBalance, getTotalIncome, getTotalExpenses } = useTransactions();
+
+  // Format transactions for display
+  const formattedTransactions = transactions
+    .slice() // Create a copy
+    .sort((a, b) => b.date.getTime() - a.date.getTime()) // Sort by date (newest first)
+    .slice(0, 4) // Take only the 4 most recent
+    .map(t => ({
+      id: t.id,
+      name: t.name,
+      amount: `${t.type === 'income' ? '+ ' : '- '}$${t.amount.toFixed(2)}`,
+      date: formatDate(t.date),
+      icon: getIconForTransaction(t),
+      color: t.type === 'income' ? '#4CAF50' : '#F44336',
+    }));
+
+  const renderItem: ListRenderItem<typeof formattedTransactions[0]> = ({ item }) => (
     <View style={styles.transactionItem}>
       <Image source={item.icon} style={styles.transactionIcon} />
       <View style={styles.transactionDetails}>
@@ -74,39 +84,47 @@ const HomeScreen: React.FC = () => {
 
         <View style={styles.balanceContainer}>
           <Text style={styles.sectionTitle}>Total Balance</Text>
-          <Text style={styles.balanceAmount}>$2,548.00</Text>
+          <Text style={styles.balanceAmount}>${getBalance().toFixed(2)}</Text>
           <View style={styles.incomeExpenseRow}>
             <View style={styles.financeBox}>
               <Text style={styles.financeLabel}>Income</Text>
-              <Text style={[styles.financeAmount, styles.incomeText]}>$1,840.00</Text>
+              <Text style={[styles.financeAmount, styles.incomeText]}>
+                ${getTotalIncome().toFixed(2)}
+              </Text>
             </View>
             <View style={styles.financeBox}>
               <Text style={styles.financeLabel}>Expenses</Text>
-              <Text style={[styles.financeAmount, styles.expenseText]}>$284.00</Text>
+              <Text style={[styles.financeAmount, styles.expenseText]}>
+                ${getTotalExpenses().toFixed(2)}
+              </Text>
             </View>
           </View>
         </View>
 
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Transactions History</Text>
-            <TouchableOpacity>
+            <Text style={styles.sectionTitle}>Recent Transactions</Text>
+            <TouchableOpacity onPress={() => router.push('/transactions')}>
               <Text style={styles.seeAllText}>See all</Text>
             </TouchableOpacity>
           </View>
 
-          <FlatList
-            data={transactions}
-            keyExtractor={(item) => item.id}
-            renderItem={renderItem}
-            scrollEnabled={false}
-          />
+          {formattedTransactions.length > 0 ? (
+            <FlatList
+              data={formattedTransactions}
+              keyExtractor={(item) => item.id}
+              renderItem={renderItem}
+              scrollEnabled={false}
+            />
+          ) : (
+            <Text style={styles.noTransactionsText}>No transactions yet</Text>
+          )}
         </View>
 
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Spend Again</Text>
-            <TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push('/categories')}>
               <Text style={styles.seeAllText}>See all</Text>
             </TouchableOpacity>
           </View>
@@ -117,11 +135,40 @@ const HomeScreen: React.FC = () => {
             <CategoryItem title="Shopping" icon="shopping-bag" />
           </View>
         </View>
-
       </ScrollView>
     </View>
   );
 };
+
+// Helper functions
+function formatDate(date: Date): string {
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  if (date.toDateString() === today.toDateString()) {
+    return 'Today';
+  } else if (date.toDateString() === yesterday.toDateString()) {
+    return 'Yesterday';
+  } else {
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+}
+
+function getIconForTransaction(transaction: any) {
+  // You can customize this based on your transaction categories
+  if (transaction.name.toLowerCase().includes('upwork')) {
+    return require('@/assets/upwork.png');
+  } else if (transaction.name.toLowerCase().includes('paypal')) {
+    return require('@/assets/paypal.png');
+  } else if (transaction.name.toLowerCase().includes('youtube')) {
+    return require('@/assets/youtube.png');
+  } else if (transaction.type === 'income') {
+    return require('@/assets/transfer.png');
+  } else {
+    return require('@/assets/upwork.png');
+  }
+}
 
 const styles = StyleSheet.create({
   container: {
@@ -283,6 +330,12 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 12,
     color: '#343A40',
+  },
+  noTransactionsText: {
+    textAlign: 'center',
+    color: '#888',
+    marginVertical: 20,
+    fontStyle: 'italic',
   },
 });
 
