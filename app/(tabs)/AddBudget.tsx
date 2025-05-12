@@ -23,6 +23,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import { Category, useTransactions } from '@/app/context/TransactionContext';
 import { FontAwesome5, Ionicons } from '@expo/vector-icons';
+import { insertExpense } from '../utils/database';
 
 const { width, height } = Dimensions.get('window');
 
@@ -33,10 +34,10 @@ const AddBudget = () => {
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(new Date());
   const [invoiceImage, setInvoiceImage] = useState<string | null>(null);
-  const [type, setType] = useState<'income' | 'expense'>('expense');
+  const [type, setType] = useState<'expense' | 'income'>('expense');
   const [isPaid, setIsPaid] = useState(true);
   const [isRecurring, setIsRecurring] = useState(false);
-  const [recurrenceInterval, setRecurrenceInterval] = useState<'monthly' | 'weekly' | 'yearly'>('monthly');
+  const [recurrenceInterval, setRecurrenceInterval] = useState('monthly');
   const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
@@ -44,6 +45,11 @@ const AddBudget = () => {
   const [isAddCategoryModalVisible, setAddCategoryModalVisible] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [selectedIcon, setSelectedIcon] = useState('shopping-bag');
+
+  const formatDate = (date: Date): string => {
+    return date.toISOString().split('T')[0];
+  };
+  
 
   const availableIcons = [
     'shopping-bag', 'utensils', 'bus', 'home', 'tshirt', 'gamepad',
@@ -55,19 +61,18 @@ const AddBudget = () => {
 
   const { selectedDate } = useLocalSearchParams();
   useEffect(() => {
-    if (selectedDate) {
-      setDate(new Date(selectedDate as string));
+    if (selectedDate && typeof selectedDate === 'string') {
+      setDate(new Date(selectedDate));
     }
   }, [selectedDate]);
 
   useEffect(() => {
-    const keyboardSubscriptions = [
-      Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true)),
-      Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false))
-    ];
+    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
 
     return () => {
-      keyboardSubscriptions.forEach(subscription => subscription.remove());
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
     };
   }, []);
 
@@ -84,27 +89,25 @@ const AddBudget = () => {
     }
 
     try {
-      await addTransaction({
+      await insertExpense(
         name,
-        amount: amountValue,
-        date,
+        amountValue,
+        date.toISOString(),
         type,
-        category: selectedCategory?.id,
-        invoiceImage: invoiceImage || undefined,
-        isPaid: type === 'income' ? true : isPaid,
+        selectedCategory?.id || '',
+        invoiceImage,
+        isPaid,
         isRecurring,
-        recurrenceInterval: isRecurring ? recurrenceInterval : null,
-      });
+        isRecurring ? recurrenceInterval : null
+      );
 
-      // Reset form
+      Alert.alert('Success', 'Transaction saved locally');
       setName('');
       setAmount('');
-      setDate(new Date());
-      setInvoiceImage(null);
       setSelectedCategory(null);
-      router.back();
+      setInvoiceImage(null);
     } catch (error) {
-      Alert.alert('Error', 'Failed to add transaction');
+      Alert.alert('Error', 'Failed to save transaction');
       console.error(error);
     }
   };
@@ -131,17 +134,6 @@ const AddBudget = () => {
     }
   };
 
-  const filteredCategories = categories.filter(
-    cat => cat.type === type || cat.type === 'both'
-  );
-
-  const formatDate = (date: Date) => date.toLocaleDateString('en-US', {
-    weekday: 'short',
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-
   const pickImage = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) return;
@@ -151,10 +143,12 @@ const AddBudget = () => {
       quality: 1,
     });
 
-    if (!result.canceled && result.assets[0]) {
+    if (!result.canceled && result.assets?.[0]) {
       setInvoiceImage(result.assets[0].uri);
     }
   };
+
+  const filteredCategories = categories.filter(cat => cat.type === type || cat.type === 'both');
 
   return (
     <View style={styles.container}>

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -9,27 +9,68 @@ import {
   Dimensions,
   ScrollView,
   ListRenderItem,
+  ActivityIndicator,
 } from 'react-native';
-import { Ionicons} from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { FontAwesome5 } from '@expo/vector-icons';
-import { useTransactions } from '@/app/context/TransactionContext';
 import { useRouter } from 'expo-router';
+import { 
+  getFirestore, 
+  doc, 
+  onSnapshot, 
+  enableIndexedDbPersistence 
+} from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
+import { initializeApp } from 'firebase/app';
+import { firebaseConfig } from '../config/firebaseConfig';
+import { fetchExpenses } from '../utils/database';
 
 const { width, height } = Dimensions.get('window');
 
-type Transaction = {
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+// Define interfaces for type safety
+interface Transaction {
+  id: string;
+  name: string;
+  amount: number;
+  date: Date;
+  type: 'income' | 'expense';
+  category?: string;
+}
+
+interface CategoryItemProps {
+  title: string;
+  icon: string;
+}
+
+interface FormattedTransaction {
   id: string;
   name: string;
   amount: string;
   date: string;
   icon: any;
   color: string;
-};
-type CategoryItemProps = {
-  title: string;
-  icon: string;
-};
+}
 
+// Making this interface exported so it can be used in database.ts as well
+export interface SQLiteTransaction {
+  id: number;
+  name: string;
+  amount: number;
+  date: string;
+  type: string;
+  category: string;
+  invoiceImage: string | null;
+  isPaid: number;
+  isRecurring: number;
+  recurrenceInterval: string | null;
+}
+
+// Improved CategoryItem component with proper type annotation
 const CategoryItem: React.FC<CategoryItemProps> = ({ title, icon }) => (
   <View style={styles.categoryItem}>
     <FontAwesome5 name={icon} size={20} color="#343A40" />
@@ -39,14 +80,122 @@ const CategoryItem: React.FC<CategoryItemProps> = ({ title, icon }) => (
 
 const HomeScreen: React.FC = () => {
   const router = useRouter();
-  const { transactions, getBalance, getTotalIncome, getTotalExpenses } = useTransactions();
+  const [userName, setUserName] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [totalIncome, setTotalIncome] = useState<number>(0);
+  const [totalExpenses, setTotalExpenses] = useState<number>(0);
+  const [balance, setBalance] = useState<number>(0);
 
-  // Format transactions for display
-  const formattedTransactions = transactions
+  // Enabling Offline Persistence
+  useEffect(() => {
+    enableIndexedDbPersistence(db)
+      .catch((err) => {
+        if (err.code === 'failed-precondition') {
+          console.log('Multiple tabs open. Persistence can only be enabled in one tab.');
+        } else if (err.code === 'unimplemented') {
+          console.log('The current browser does not support persistence.');
+        }
+      });
+  }, []);
+
+  // Fetch the user data
+  useEffect(() => {
+    const currentUser = auth.currentUser;
+    const uid = currentUser?.uid;
+    
+    if (!uid) {
+      console.error('User not authenticated yet');
+      setLoading(false);
+      return;
+    }
+  
+    const unsubscribe = onSnapshot(
+      doc(db, 'users', uid),
+      (docSnapshot) => {
+        if (docSnapshot.exists()) {
+          const userData = docSnapshot.data();
+          
+          // Prioritize displayName, then email
+          const name = userData?.displayName || 
+                       userData?.fullName || 
+                       currentUser?.displayName || 
+                       currentUser?.email?.split('@')[0] || 
+                       'User';
+          
+          setUserName(name);
+        } else {
+          // Fallback to email or default name if no Firestore document
+          const name = currentUser?.displayName || 
+                       currentUser?.email?.split('@')[0] || 
+                       'User';
+          setUserName(name);
+        }
+        setLoading(false);
+      },
+      (error) => {
+        console.error('Firestore listener error:', error);
+        
+        // Fallback to email or default name in case of error
+        const name = currentUser?.displayName || 
+                     currentUser?.email?.split('@')[0] || 
+                     'User';
+        setUserName(name);
+        setLoading(false);
+      }
+    );
+  
+    return () => unsubscribe();
+  }, []);
+
+  // Fetch transactions from SQLite
+  useEffect(() => {
+    const loadTransactions = async () => {
+      try {
+        // Explicitly type the result of fetchExpenses
+        const sqliteTransactions = await fetchExpenses() as SQLiteTransaction[];
+        
+        let incomeTotal = 0;
+        let expenseTotal = 0;
+        
+        // Transform SQLite transactions to our app format
+        const transformedTransactions = sqliteTransactions.map((t: SQLiteTransaction) => {
+          // Calculate totals
+          if (t.type === 'income') {
+            incomeTotal += t.amount;
+          } else {
+            expenseTotal += t.amount;
+          }
+          
+          return {
+            id: t.id.toString(),
+            name: t.name,
+            amount: t.amount,
+            date: new Date(t.date),
+            type: t.type as 'income' | 'expense',
+            category: t.category
+          };
+        });
+        
+        // Update state
+        setTotalIncome(incomeTotal);
+        setTotalExpenses(expenseTotal);
+        setBalance(incomeTotal - expenseTotal);
+        setTransactions(transformedTransactions);
+      } catch (error) {
+        console.error('Error fetching transactions from SQLite:', error);
+      }
+    };
+    
+    loadTransactions();
+  }, []);
+
+  // Format transactions for display with improved error handling
+  const formattedTransactions: FormattedTransaction[] = transactions
     .slice() // Create a copy
     .sort((a, b) => b.date.getTime() - a.date.getTime()) // Sort by date (newest first)
     .slice(0, 4) // Take only the 4 most recent
-    .map(t => ({
+    .map((t) => ({
       id: t.id,
       name: t.name,
       amount: `${t.type === 'income' ? '+ ' : '- '}$${t.amount.toFixed(2)}`,
@@ -55,20 +204,39 @@ const HomeScreen: React.FC = () => {
       color: t.type === 'income' ? '#4CAF50' : '#F44336',
     }));
 
-  const renderItem: ListRenderItem<typeof formattedTransactions[0]> = ({ item }) => (
+  const renderItem: ListRenderItem<FormattedTransaction> = ({ item }) => (
     <View style={styles.transactionItem}>
-      <Image source={item.icon} style={styles.transactionIcon} />
+      <Image 
+        source={item.icon} 
+        style={styles.transactionIcon} 
+        defaultSource={require('@/assets/profile-avatar.png')} // Add a default icon
+      />
       <View style={styles.transactionDetails}>
-        <Text style={styles.transactionName}>{item.name}</Text>
+        <Text style={styles.transactionName} numberOfLines={1} ellipsizeMode="tail">
+          {item.name}
+        </Text>
         <Text style={styles.transactionDate}>{item.date}</Text>
       </View>
       <Text style={[styles.transactionAmount, { color: item.color }]}>{item.amount}</Text>
     </View>
   );
 
+  // Show loading indicator while fetching user name
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4CAF50" />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent} 
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled" // Improves touch handling
+      >
         <View style={styles.backgroundContainer}>
           <Image
             source={require('@/assets/Rectangle.png')}
@@ -78,24 +246,28 @@ const HomeScreen: React.FC = () => {
         </View>
 
         <View style={styles.greetingContainer}>
-          <Text style={styles.greetingText}>Good afternoon,</Text>
-          <Text style={styles.userName}>Enjelin Morgeana</Text>
+          <Text style={styles.greetingText}>Hello,</Text>
+          <Text style={styles.userName}>
+            {userName}
+          </Text>
         </View>
 
         <View style={styles.balanceContainer}>
           <Text style={styles.sectionTitle}>Total Balance</Text>
-          <Text style={styles.balanceAmount}>${getBalance().toFixed(2)}</Text>
+          <Text style={styles.balanceAmount}>
+            ${balance.toFixed(2)}
+          </Text>
           <View style={styles.incomeExpenseRow}>
             <View style={styles.financeBox}>
               <Text style={styles.financeLabel}>Income</Text>
               <Text style={[styles.financeAmount, styles.incomeText]}>
-                ${getTotalIncome().toFixed(2)}
+                ${totalIncome.toFixed(2)}
               </Text>
             </View>
             <View style={styles.financeBox}>
               <Text style={styles.financeLabel}>Expenses</Text>
               <Text style={[styles.financeAmount, styles.expenseText]}>
-                ${getTotalExpenses().toFixed(2)}
+                ${totalExpenses.toFixed(2)}
               </Text>
             </View>
           </View>
@@ -104,7 +276,10 @@ const HomeScreen: React.FC = () => {
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Recent Transactions</Text>
-            <TouchableOpacity onPress={() => router.push('/transactions')}>
+            <TouchableOpacity 
+              onPress={() => router.push('/transactions')}
+              accessibilityLabel="View all transactions"
+            >
               <Text style={styles.seeAllText}>See all</Text>
             </TouchableOpacity>
           </View>
@@ -115,16 +290,26 @@ const HomeScreen: React.FC = () => {
               keyExtractor={(item) => item.id}
               renderItem={renderItem}
               scrollEnabled={false}
+              ListEmptyComponent={
+                <Text style={styles.noTransactionsText}>
+                  No transactions yet
+                </Text>
+              }
             />
           ) : (
-            <Text style={styles.noTransactionsText}>No transactions yet</Text>
+            <Text style={styles.noTransactionsText}>
+              No transactions yet
+            </Text>
           )}
         </View>
 
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Spend Again</Text>
-            <TouchableOpacity onPress={() => router.push('/categories')}>
+            <TouchableOpacity 
+              onPress={() => router.push('/categories')}
+              accessibilityLabel="View all categories"
+            >
               <Text style={styles.seeAllText}>See all</Text>
             </TouchableOpacity>
           </View>
@@ -140,7 +325,7 @@ const HomeScreen: React.FC = () => {
   );
 };
 
-// Helper functions
+// Helper functions with improved type safety
 function formatDate(date: Date): string {
   const today = new Date();
   const yesterday = new Date(today);
@@ -151,22 +336,27 @@ function formatDate(date: Date): string {
   } else if (date.toDateString() === yesterday.toDateString()) {
     return 'Yesterday';
   } else {
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric' 
+    });
   }
 }
 
-function getIconForTransaction(transaction: any) {
-  // You can customize this based on your transaction categories
-  if (transaction.name.toLowerCase().includes('upwork')) {
+function getIconForTransaction(transaction: Transaction) {
+  const lowerName = transaction.name.toLowerCase();
+  
+  if (lowerName.includes('upwork')) {
     return require('@/assets/upwork.png');
-  } else if (transaction.name.toLowerCase().includes('paypal')) {
+  } else if (lowerName.includes('paypal')) {
     return require('@/assets/paypal.png');
-  } else if (transaction.name.toLowerCase().includes('youtube')) {
+  } else if (lowerName.includes('youtube')) {
     return require('@/assets/youtube.png');
   } else if (transaction.type === 'income') {
     return require('@/assets/transfer.png');
   } else {
-    return require('@/assets/upwork.png');
+    return require('@/assets/profile-avatar.png');
   }
 }
 
@@ -194,61 +384,41 @@ const styles = StyleSheet.create({
   },
   greetingContainer: {
     marginTop: height * 0.05,
-    marginBottom: 10,
+    marginBottom: 20,
   },
   greetingText: {
-    fontSize: 16,
-    color: '#fff',
+    fontSize: 24,
+    fontWeight: '500',
+    color: '#343A40',
   },
   userName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginVertical: 5,
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  errorText: {
+    color: 'red',
+    fontSize: 14,
   },
   balanceContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 15,
+    marginTop: 20,
+    backgroundColor: '#fff',
     padding: 20,
-    marginTop: height * 0.02,
-    width: '100%',
+    borderRadius: 15,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 3,
+    shadowRadius: 5,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '600',
     color: '#343A40',
-  },
-  sectionContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 15,
-    padding: 20,
-    marginTop: 20,
-    width: '100%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  seeAllText: {
-    color: '#4D9F8D',
-    fontWeight: '500',
   },
   balanceAmount: {
     fontSize: 32,
-    fontWeight: 'bold',
-    color: '#343A40',
+    fontWeight: '700',
+    color: '#4CAF50',
     marginVertical: 10,
   },
   incomeExpenseRow: {
@@ -257,14 +427,13 @@ const styles = StyleSheet.create({
   },
   financeBox: {
     backgroundColor: '#F8F9FA',
+    padding: 10,
     borderRadius: 10,
-    padding: 15,
     width: '48%',
   },
   financeLabel: {
     fontSize: 14,
     color: '#6C757D',
-    marginBottom: 5,
   },
   financeAmount: {
     fontSize: 18,
@@ -276,66 +445,84 @@ const styles = StyleSheet.create({
   expenseText: {
     color: '#F44336',
   },
-  transactionItem: {
+  sectionContainer: {
+    marginTop: 20,
+    backgroundColor: '#fff',
+    padding: 20,
+    borderRadius: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+  },
+  sectionHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
   },
-  transactionIcon: {
-    width: 40,
-    height: 40,
-    marginRight: 10,
-  },
-  transactionDetails: {
-    flex: 1,
-  },
-  transactionName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  transactionDate: {
+  seeAllText: {
     fontSize: 14,
-    color: '#888',
-  },
-  transactionAmount: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  addButton: {
-    position: 'absolute',
-    bottom: 20,
-    right: 20,
-    backgroundColor: '#388984',
-    padding: 15,
-    borderRadius: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
+    fontWeight: '600',
+    color: '#4CAF50',
   },
   categoryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 10,
+    marginTop: 20,
   },
   categoryItem: {
+    width: '30%',
+    alignItems: 'center',
     backgroundColor: '#F8F9FA',
     padding: 15,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '30%',
+    borderRadius: 15,
+    elevation: 2,
   },
   categoryText: {
-    marginTop: 8,
-    fontSize: 12,
+    marginTop: 10,
+    fontSize: 14,
+    fontWeight: '600',
     color: '#343A40',
+  },
+  transactionItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E1E1E1',
+  },
+  transactionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  transactionDetails: {
+    flex: 1,
+    marginLeft: 10,
+  },
+  transactionName: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  transactionDate: {
+    fontSize: 12,
+    color: '#6C757D',
+  },
+  transactionAmount: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   noTransactionsText: {
     textAlign: 'center',
-    color: '#888',
-    marginVertical: 20,
-    fontStyle: 'italic',
+    fontSize: 16,
+    color: '#6C757D',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
   },
 });
 

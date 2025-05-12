@@ -10,6 +10,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TransactionProvider } from '@/app/context/TransactionContext';
+import { initDatabase } from './utils/database';
 
 const AppIntroSlider: any = require('react-native-app-intro-slider').default;
 
@@ -73,6 +74,18 @@ useEffect(() => {
   checkOnboarding();
 }, []);
 
+useEffect(() => {
+  const setup = async () => {
+    try {
+      await initDatabase();
+      console.log('Database initialized');
+    } catch (e) {
+      console.error('DB init error', e);
+    }
+  };
+  setup();
+}, []);
+
 
   useEffect(() => {
     if (loaded && showOnboarding !== null) {
@@ -130,7 +143,7 @@ useEffect(() => {
         <Stack>
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="verifyOtp" options={{ title: 'Verify OTP' }} />
+          <Stack.Screen name="register" options={{ title: 'Register' }} />
           <Stack.Screen name="+not-found" />
         </Stack>
         <StatusBar style="auto" />

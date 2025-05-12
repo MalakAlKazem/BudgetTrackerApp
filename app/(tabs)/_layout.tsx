@@ -1,7 +1,7 @@
 import { Tabs } from 'expo-router';
 import React, { useState, useEffect } from 'react';
 import { Platform, View, StyleSheet, Keyboard } from 'react-native';
-import * as NavigationBar from 'expo-navigation-bar'; // Import the navigation bar module
+import * as NavigationBar from 'expo-navigation-bar';
 import { HapticTab } from '@/components/HapticTab';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -17,21 +17,23 @@ export default function TabLayout() {
     let hideInterval: NodeJS.Timeout;
 
     const hideNavigationBar = async () => {
-      try {
-        // Set immersive mode first for better results
-        // await NavigationBar.setBehaviorAsync('overlay');
-        await NavigationBar.setVisibilityAsync('hidden');
-      } catch (error) {
-        console.warn('NavigationBar error:', error);
+      if (Platform.OS === 'android') {
+        try {
+          await NavigationBar.setBehaviorAsync('inset-swipe');
+          await NavigationBar.setVisibilityAsync('hidden');
+        } catch (error) {
+          console.warn('NavigationBar error:', error);
+        }
       }
     };
 
-    // Immediate hide
+    // Initial hide
     hideNavigationBar();
 
-    // Continuous hiding (every 2 seconds)
+    // Re-hide periodically (useful for Android system UI visibility resets)
     hideInterval = setInterval(hideNavigationBar, 3000);
 
+    // Hide tab bar when keyboard appears
     const keyboardDidShow = Keyboard.addListener('keyboardDidShow', () => {
       setHideTabBar(true);
       hideNavigationBar();
@@ -57,7 +59,7 @@ export default function TabLayout() {
         tabBarStyle: [
           styles.tabBar,
           Platform.OS === 'ios' && styles.iosTabBar,
-          hideTabBar && { display: 'none' }, // Conditionally hide the tab bar
+          hideTabBar && { display: 'none' },
         ],
         tabBarActiveTintColor: PRIMARY_COLOR,
         tabBarInactiveTintColor: '#ccc',

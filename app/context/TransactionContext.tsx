@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, ReactNode, useEffect } from
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type TransactionType = 'income' | 'expense';
+
 export interface Category {
   id: string;
   name: string;
@@ -24,6 +25,8 @@ export interface Transaction {
   isRecurring?: boolean;
   recurrenceInterval?: 'monthly' | 'weekly' | 'yearly' | null;
   originalTransactionId?: string;
+  icon: any;   
+  color: string;
 }
 
 interface TransactionContextType {
@@ -62,7 +65,7 @@ const DEFAULT_CATEGORIES: Category[] = [
   { id: 'cat_gifts', name: 'Gifts', icon: 'gift', type: 'income' },
 ];
 
-export const TransactionProvider: React.FC<{children: ReactNode}> = ({ children }) => {
+export const TransactionProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [recurringTransactions, setRecurringTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>(DEFAULT_CATEGORIES);
@@ -122,13 +125,12 @@ export const TransactionProvider: React.FC<{children: ReactNode}> = ({ children 
     saveData();
   }, [transactions, recurringTransactions, categories, isLoading]);
 
-  // Calculate the next occurrence of a recurring transaction
   const getNextOccurrence = (transaction: Transaction): Date => {
     const now = new Date();
     let nextDate = new Date(transaction.date);
-    
+
     if (nextDate >= now) return nextDate;
-    
+
     while (nextDate < now) {
       switch (transaction.recurrenceInterval) {
         case 'weekly':
@@ -142,18 +144,14 @@ export const TransactionProvider: React.FC<{children: ReactNode}> = ({ children 
           break;
       }
     }
-    
+
     return nextDate;
   };
 
-  // Process recurring transactions and add the next occurrence to the visible transactions
   useEffect(() => {
     if (isLoading) return;
-    
-    // Filter out any previous next occurrences
+
     const filteredTransactions = transactions.filter(t => !t.originalTransactionId);
-    
-    // Generate next occurrences for each recurring transaction
     const nextOccurrences = recurringTransactions.map(t => {
       const nextDate = getNextOccurrence(t);
       return {
@@ -164,14 +162,15 @@ export const TransactionProvider: React.FC<{children: ReactNode}> = ({ children 
         originalTransactionId: t.id
       };
     });
-    
+
     setTransactions([...filteredTransactions, ...nextOccurrences]);
   }, [recurringTransactions, isLoading]);
 
   const addTransaction = async (transaction: Omit<Transaction, 'id'>) => {
     try {
-      const category = transaction.category ? 
-        categories.find(c => c.id === transaction.category) : undefined;
+      const category = transaction.category
+        ? categories.find(c => c.id === transaction.category)
+        : undefined;
 
       const newTransaction: Transaction = {
         ...transaction,
@@ -192,30 +191,22 @@ export const TransactionProvider: React.FC<{children: ReactNode}> = ({ children 
     }
   };
 
-
   const deleteTransaction = async (id: string) => {
     try {
-      // Check if this is a recurring transaction
       const recurring = recurringTransactions.find(t => t.id === id);
       if (recurring) {
-        // Remove from recurring transactions
         setRecurringTransactions(prev => prev.filter(t => t.id !== id));
-        // Remove any next occurrences
         setTransactions(prev => prev.filter(t => t.originalTransactionId !== id));
       } else {
-        // Check if this is a next occurrence of a recurring transaction
         const transaction = transactions.find(t => t.id === id);
         if (transaction?.originalTransactionId) {
-          // Remove the original recurring transaction
-          setRecurringTransactions(prev => 
+          setRecurringTransactions(prev =>
             prev.filter(t => t.id !== transaction.originalTransactionId)
           );
-          // Remove this occurrence
-          setTransactions(prev => 
+          setTransactions(prev =>
             prev.filter(t => t.id !== id && t.originalTransactionId !== transaction.originalTransactionId)
           );
         } else {
-          // Just a normal transaction
           setTransactions(prev => prev.filter(t => t.id !== id));
         }
       }
@@ -228,12 +219,11 @@ export const TransactionProvider: React.FC<{children: ReactNode}> = ({ children 
   const getBalance = () => {
     return parseFloat(transactions.reduce((total, t) => {
       if (t.type === 'income') return total + t.amount;
-      // Only subtract paid expenses
       if (t.type === 'expense' && t.isPaid !== false) return total - t.amount;
       return total;
     }, 0).toFixed(2));
   };
-  
+
   const getTotalIncome = () => {
     return parseFloat(transactions
       .filter(t => t.type === 'income')
@@ -244,23 +234,21 @@ export const TransactionProvider: React.FC<{children: ReactNode}> = ({ children 
 
   const getTotalExpenses = () => {
     return parseFloat(transactions
-      .filter(t => t.type === 'expense' && t.isPaid !== false) // Only count paid expenses
+      .filter(t => t.type === 'expense' && t.isPaid !== false)
       .reduce((total, t) => total + t.amount, 0)
       .toFixed(2)
     );
   };
-  
+
   const markAsPaid = async (id: string) => {
     try {
       setTransactions(prev => prev.map(t => {
         if (t.id === id) {
-          // If this is a recurring transaction, create the next occurrence
           if (t.originalTransactionId && t.isRecurring) {
             const original = recurringTransactions.find(rt => rt.id === t.originalTransactionId);
             if (original) {
-              // Find the next occurrence date based on current date
               let nextDate = new Date(t.date);
-              
+
               switch (original.recurrenceInterval) {
                 case 'weekly':
                   nextDate.setDate(nextDate.getDate() + 7);
@@ -272,8 +260,7 @@ export const TransactionProvider: React.FC<{children: ReactNode}> = ({ children 
                   nextDate.setFullYear(nextDate.getFullYear() + 1);
                   break;
               }
-              
-              // Add the next occurrence
+
               setTimeout(() => {
                 setTransactions(prevTrans => [
                   ...prevTrans,
@@ -309,7 +296,6 @@ export const TransactionProvider: React.FC<{children: ReactNode}> = ({ children 
     return transactions.filter(t => t.category === categoryId);
   };
 
-  // Category management
   const addCategory = async (category: Omit<Category, 'id'>) => {
     try {
       const newCategory: Category = {
@@ -327,8 +313,7 @@ export const TransactionProvider: React.FC<{children: ReactNode}> = ({ children 
   const updateCategory = async (category: Category) => {
     try {
       setCategories(prev => prev.map(c => c.id === category.id ? category : c));
-      
-      // Update category info in transactions
+
       setTransactions(prev => prev.map(t => {
         if (t.category === category.id) {
           return {
@@ -348,8 +333,6 @@ export const TransactionProvider: React.FC<{children: ReactNode}> = ({ children 
   const deleteCategory = async (id: string) => {
     try {
       setCategories(prev => prev.filter(c => c.id !== id));
-      
-      // Remove category from transactions that use it
       setTransactions(prev => prev.map(t => {
         if (t.category === id) {
           const { category, categoryName, categoryIcon, ...rest } = t;
@@ -383,7 +366,7 @@ export const TransactionProvider: React.FC<{children: ReactNode}> = ({ children 
         addCategory,
         updateCategory,
         deleteCategory,
-        getDefaultCategories: () => DEFAULT_CATEGORIES,
+        getDefaultCategories,
         isLoading,
       }}
     >
@@ -399,3 +382,6 @@ export const useTransactions = () => {
   }
   return context;
 };
+
+// ✅ This default export fixes the warning
+export default TransactionProvider;
