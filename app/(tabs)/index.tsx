@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,20 +10,16 @@ import {
   ScrollView,
   ListRenderItem,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { 
-  getFirestore, 
-  doc, 
-  onSnapshot, 
-  enableIndexedDbPersistence 
-} from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { getFirestore } from 'firebase/firestore';
 import { initializeApp } from 'firebase/app';
 import { firebaseConfig } from '../config/firebaseConfig';
-import { fetchExpenses } from '../utils/database';
+import { useTransactions, Transaction } from '../context/TransactionContext';
 
 const { width, height } = Dimensions.get('window');
 
@@ -31,16 +27,6 @@ const { width, height } = Dimensions.get('window');
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
-
-// Define interfaces for type safety
-interface Transaction {
-  id: string;
-  name: string;
-  amount: number;
-  date: Date;
-  type: 'income' | 'expense';
-  category?: string;
-}
 
 interface CategoryItemProps {
   title: string;
@@ -56,21 +42,6 @@ interface FormattedTransaction {
   color: string;
 }
 
-// Making this interface exported so it can be used in database.ts as well
-export interface SQLiteTransaction {
-  id: number;
-  name: string;
-  amount: number;
-  date: string;
-  type: string;
-  category: string;
-  invoiceImage: string | null;
-  isPaid: number;
-  isRecurring: number;
-  recurrenceInterval: string | null;
-}
-
-// Improved CategoryItem component with proper type annotation
 const CategoryItem: React.FC<CategoryItemProps> = ({ title, icon }) => (
   <View style={styles.categoryItem}>
     <FontAwesome5 name={icon} size={20} color="#343A40" />
@@ -80,32 +51,25 @@ const CategoryItem: React.FC<CategoryItemProps> = ({ title, icon }) => (
 
 const HomeScreen: React.FC = () => {
   const router = useRouter();
-  const [userName, setUserName] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [totalIncome, setTotalIncome] = useState<number>(0);
-  const [totalExpenses, setTotalExpenses] = useState<number>(0);
-  const [balance, setBalance] = useState<number>(0);
+  const [userName, setUserName] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState<boolean>(true);
+  const [refreshing, setRefreshing] = React.useState<boolean>(false);
+  
+  const { 
+    transactions, 
+    totalIncome, 
+    totalExpenses, 
+    balance, 
+    refreshTransactions,
+    isLoading: transactionsLoading
+  } = useTransactions();
 
-  // Enabling Offline Persistence
   useEffect(() => {
-    enableIndexedDbPersistence(db)
-      .catch((err) => {
-        if (err.code === 'failed-precondition') {
-          console.log('Multiple tabs open. Persistence can only be enabled in one tab.');
-        } else if (err.code === 'unimplemented') {
-          console.log('The current browser does not support persistence.');
-        }
-      });
-  }, []);
-
-  // Fetch the user data
-  useEffect(() => {
-    const currentUser = auth.currentUser;
-    const uid = currentUser?.uid;
+    const currentUser  = auth.currentUser ;
+    const uid = currentUser ?.uid;
     
     if (!uid) {
-      console.error('User not authenticated yet');
+      console.error('User  not authenticated yet');
       setLoading(false);
       return;
     }
@@ -115,31 +79,25 @@ const HomeScreen: React.FC = () => {
       (docSnapshot) => {
         if (docSnapshot.exists()) {
           const userData = docSnapshot.data();
-          
-          // Prioritize displayName, then email
           const name = userData?.displayName || 
                        userData?.fullName || 
-                       currentUser?.displayName || 
-                       currentUser?.email?.split('@')[0] || 
-                       'User';
-          
+                       currentUser ?.displayName || 
+                       currentUser ?.email?.split('@')[0] || 
+                       'User ';
           setUserName(name);
         } else {
-          // Fallback to email or default name if no Firestore document
-          const name = currentUser?.displayName || 
-                       currentUser?.email?.split('@')[0] || 
-                       'User';
+          const name = currentUser ?.displayName || 
+                       currentUser ?.email?.split('@')[0] || 
+                       'User ';
           setUserName(name);
         }
         setLoading(false);
       },
       (error) => {
         console.error('Firestore listener error:', error);
-        
-        // Fallback to email or default name in case of error
-        const name = currentUser?.displayName || 
-                     currentUser?.email?.split('@')[0] || 
-                     'User';
+        const name = currentUser ?.displayName || 
+                     currentUser ?.email?.split('@')[0] || 
+                     'User ';
         setUserName(name);
         setLoading(false);
       }
@@ -148,57 +106,20 @@ const HomeScreen: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  // Fetch transactions from SQLite
-  useEffect(() => {
-    const loadTransactions = async () => {
-      try {
-        // Explicitly type the result of fetchExpenses
-        const sqliteTransactions = await fetchExpenses() as SQLiteTransaction[];
-        
-        let incomeTotal = 0;
-        let expenseTotal = 0;
-        
-        // Transform SQLite transactions to our app format
-        const transformedTransactions = sqliteTransactions.map((t: SQLiteTransaction) => {
-          // Calculate totals
-          if (t.type === 'income') {
-            incomeTotal += t.amount;
-          } else {
-            expenseTotal += t.amount;
-          }
-          
-          return {
-            id: t.id.toString(),
-            name: t.name,
-            amount: t.amount,
-            date: new Date(t.date),
-            type: t.type as 'income' | 'expense',
-            category: t.category
-          };
-        });
-        
-        // Update state
-        setTotalIncome(incomeTotal);
-        setTotalExpenses(expenseTotal);
-        setBalance(incomeTotal - expenseTotal);
-        setTransactions(transformedTransactions);
-      } catch (error) {
-        console.error('Error fetching transactions from SQLite:', error);
-      }
-    };
-    
-    loadTransactions();
-  }, []);
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await refreshTransactions();
+    setRefreshing(false);
+  };
 
-  // Format transactions for display with improved error handling
   const formattedTransactions: FormattedTransaction[] = transactions
-    .slice() // Create a copy
-    .sort((a, b) => b.date.getTime() - a.date.getTime()) // Sort by date (newest first)
-    .slice(0, 4) // Take only the 4 most recent
+    .slice()
+    .sort((a, b) => b.date.getTime() - a.date.getTime())
+    .slice(0, 4)
     .map((t) => ({
       id: t.id,
-      name: t.name,
-      amount: `${t.type === 'income' ? '+ ' : '- '}$${t.amount.toFixed(2)}`,
+      name: t.name || 'Unnamed Transaction', // Fallback for undefined name
+      amount: `${t.type === 'income' ? '+ ' : '- '}$${t.amount?.toFixed(2) || '0.00'}`, // Fallback for undefined amount
       date: formatDate(t.date),
       icon: getIconForTransaction(t),
       color: t.type === 'income' ? '#4CAF50' : '#F44336',
@@ -209,7 +130,7 @@ const HomeScreen: React.FC = () => {
       <Image 
         source={item.icon} 
         style={styles.transactionIcon} 
-        defaultSource={require('@/assets/profile-avatar.png')} // Add a default icon
+        defaultSource={require('@/assets/profile-avatar.png')}
       />
       <View style={styles.transactionDetails}>
         <Text style={styles.transactionName} numberOfLines={1} ellipsizeMode="tail">
@@ -221,8 +142,7 @@ const HomeScreen: React.FC = () => {
     </View>
   );
 
-  // Show loading indicator while fetching user name
-  if (loading) {
+  if (loading || transactionsLoading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#4CAF50" />
@@ -235,7 +155,10 @@ const HomeScreen: React.FC = () => {
       <ScrollView 
         contentContainerStyle={styles.scrollContent} 
         showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled" // Improves touch handling
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+        }
       >
         <View style={styles.backgroundContainer}>
           <Image
@@ -325,7 +248,6 @@ const HomeScreen: React.FC = () => {
   );
 };
 
-// Helper functions with improved type safety
 function formatDate(date: Date): string {
   const today = new Date();
   const yesterday = new Date(today);
@@ -345,8 +267,7 @@ function formatDate(date: Date): string {
 }
 
 function getIconForTransaction(transaction: Transaction) {
-  const lowerName = transaction.name.toLowerCase();
-  
+  const lowerName = transaction.name?.toLowerCase() || ''; // Ensure name is defined
   if (lowerName.includes('upwork')) {
     return require('@/assets/upwork.png');
   } else if (lowerName.includes('paypal')) {
@@ -359,7 +280,6 @@ function getIconForTransaction(transaction: Transaction) {
     return require('@/assets/profile-avatar.png');
   }
 }
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,

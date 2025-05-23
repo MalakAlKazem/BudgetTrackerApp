@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { useRouter } from 'expo-router';
-import { useTransactions } from '@/app/context/TransactionContext';
+import { fetchTransactions } from '../utils/database';
 
 const { width, height } = Dimensions.get('window');
 
@@ -34,11 +34,21 @@ const darkText = '#2F4F4F';
 const unpaidColor = '#FF6B6B';
 
 const CalendarScreen = () => {
-  const { transactions } = useTransactions();
+  const [transactions, setTransactions] = useState<any[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [markedDates, setMarkedDates] = useState<Record<string, any>>({});
   const router = useRouter();
   
+  // Fetch transactions from the database
+  useEffect(() => {
+    const loadTransactions = async () => {
+      const fetchedTransactions = await fetchTransactions();
+      setTransactions(fetchedTransactions);
+    };
+
+    loadTransactions();
+  }, []);
+
   // Process transactions and upcoming unpaid expenses
   useEffect(() => {
     const today = new Date();
@@ -47,8 +57,8 @@ const CalendarScreen = () => {
     // Group transactions by date
     const spendingData = transactions.reduce((acc, transaction) => {
       if (transaction.type === 'expense') {
-        const dateStr = transaction.date.toISOString().split('T')[0];
-        
+        const dateStr = transaction.date.split('T')[0]; // Adjusted to match the date format
+
         if (!acc[dateStr]) {
           acc[dateStr] = {
             transactions: [],
@@ -58,13 +68,13 @@ const CalendarScreen = () => {
         
         acc[dateStr].transactions.push({
           amount: transaction.amount,
-          notes: transaction.name,
-          isPaid: transaction.isPaid,
-          isRecurring: transaction.isRecurring,
-          recurrenceInterval: transaction.recurrenceInterval,
+          notes: transaction.title, // Adjusted to match the property name
+          isPaid: transaction.isScheduled === 0, // Assuming isScheduled indicates payment status
+          isRecurring: false, // Adjust as necessary if you have a recurring field
+          recurrenceInterval: null, // Adjust as necessary if you have a recurrence field
         });
         
-        if (transaction.isPaid === false) {
+        if (transaction.isScheduled === 0) {
           acc[dateStr].hasUnpaid = true;
         }
       }
@@ -75,7 +85,6 @@ const CalendarScreen = () => {
     const newMarkedDates = Object.keys(spendingData).reduce((acc, date) => {
       acc[date] = {
         marked: true,
-        // Use unpaid color if any transaction is unpaid
         dotColor: spendingData[date].hasUnpaid ? unpaidColor : primaryColor,
         selected: selectedDate === date,
         selectedColor: spendingData[date].hasUnpaid ? unpaidColor : primaryColor,
@@ -100,7 +109,7 @@ const CalendarScreen = () => {
   // Get all transactions for selected date
   const getTransactionsForDate = (date: string) => {
     return transactions.filter(t => {
-      const dateStr = t.date.toISOString().split('T')[0];
+      const dateStr = t.date.split('T')[0]; // Adjusted to match the date format
       return dateStr === date && t.type === 'expense';
     });
   };
@@ -122,7 +131,7 @@ const CalendarScreen = () => {
         💸 Amount: <Text style={styles.highlight}>${item.amount.toFixed(2)}</Text>
       </Text>
       <Text style={styles.detailText}>
-        📝 Note: <Text style={styles.highlight}>{item.name}</Text>
+        📝 Note: <Text style={styles.highlight}>{item.notes}</Text>
       </Text>
       {item.isPaid === false && (
         <Text style={[styles.detailText, { color: unpaidColor }]}>

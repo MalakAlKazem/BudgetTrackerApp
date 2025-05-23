@@ -17,27 +17,27 @@ import {
   StatusBar,
   Modal,
   FlatList,
+  ActivityIndicator
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import { Category, useTransactions } from '@/app/context/TransactionContext';
 import { FontAwesome5, Ionicons } from '@expo/vector-icons';
-import { insertExpense } from '../utils/database';
+import { insertTransaction } from '../utils/database';
+import * as Notifications from 'expo-notifications';
 
 const { width, height } = Dimensions.get('window');
 
 const AddBudget = () => {
   const router = useRouter();
-  const { addTransaction, categories, addCategory } = useTransactions();
-  const [name, setName] = useState('');
+  const { addTransaction, categories, addCategory, refreshTransactions } = useTransactions();
+  const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(new Date());
-  const [invoiceImage, setInvoiceImage] = useState<string | null>(null);
+  const [invoice, setInvoice] = useState<string | null>(null);
   const [type, setType] = useState<'expense' | 'income'>('expense');
-  const [isPaid, setIsPaid] = useState(true);
-  const [isRecurring, setIsRecurring] = useState(false);
-  const [recurrenceInterval, setRecurrenceInterval] = useState('monthly');
+  const [isScheduled, setIsScheduled] = useState(false);
   const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
@@ -45,12 +45,12 @@ const AddBudget = () => {
   const [isAddCategoryModalVisible, setAddCategoryModalVisible] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [selectedIcon, setSelectedIcon] = useState('shopping-bag');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const formatDate = (date: Date): string => {
     return date.toISOString().split('T')[0];
   };
   
-
   const availableIcons = [
     'shopping-bag', 'utensils', 'bus', 'home', 'tshirt', 'gamepad',
     'coffee', 'plane', 'graduation-cap', 'car', 'gift', 'medkit',
@@ -76,8 +76,32 @@ const AddBudget = () => {
     };
   }, []);
 
-  const handleAddExpense = async () => {
-    if (!name || !amount) {
+  // Request notifications permission on component mount
+  useEffect(() => {
+    const requestNotificationsPermission = async () => {
+      if (Platform.OS === 'ios' || Platform.OS === 'android') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        if (status !== 'granted') {
+          console.log('Notification permissions not granted');
+        }
+      }
+    };
+    
+    requestNotificationsPermission();
+  }, []);
+
+  const scheduleNotification = async (transactionTitle: string, transactionType: string) => {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Transaction Added',
+        body: `Your ${transactionType} "${transactionTitle}" has been successfully added!`,
+      },
+      trigger: null, // Send immediately
+    });
+  };
+
+  const handleAddTransaction = async () => {
+    if (!title || !amount) {
       Alert.alert('Error', 'Please fill in all required fields');
       return;
     }
@@ -88,27 +112,71 @@ const AddBudget = () => {
       return;
     }
 
+    setIsSubmitting(true);
+    
     try {
-      await insertExpense(
-        name,
+      // Insert into local SQLite database
+      const transactionId = await insertTransaction(
+        title,
         amountValue,
         date.toISOString(),
         type,
         selectedCategory?.id || '',
-        invoiceImage,
-        isPaid,
-        isRecurring,
-        isRecurring ? recurrenceInterval : null
+        isScheduled,
+        invoice
       );
 
-      Alert.alert('Success', 'Transaction saved locally');
-      setName('');
-      setAmount('');
-      setSelectedCategory(null);
-      setInvoiceImage(null);
+      // Create a transaction object for the context
+      const newTransaction = {
+        id: transactionId,
+        name: title,
+        amount: amountValue,
+        date: date,
+        type: type,
+        category: selectedCategory?.id || '',
+        isPaid: true,
+        isRecurring: isScheduled,
+        recurrenceInterval: isScheduled ? 'monthly' : null,
+        invoiceImage: invoice
+      };
+      
+      // Add to context (in memory)
+      addTransaction(newTransaction);
+      
+      // Trigger refresh in other components
+      if (refreshTransactions) {
+        refreshTransactions();
+      }
+      
+      // Show notification
+      await scheduleNotification(title, type);
+
+      Alert.alert(
+        'Success', 
+        'Transaction saved successfully',
+        [
+          { 
+            text: 'Add Another', 
+            onPress: () => {
+              setTitle('');
+              setAmount('');
+              setSelectedCategory(null);
+              setInvoice(null);
+              setIsSubmitting(false);
+            } 
+          },
+          { 
+            text: 'Go to Home', 
+            onPress: () => {
+              router.replace('/'); // Navigate back to home screen
+            }
+          }
+        ]
+      );
     } catch (error) {
+      console.error('Error saving transaction:', error);
       Alert.alert('Error', 'Failed to save transaction');
-      console.error(error);
+      setIsSubmitting(false);
     }
   };
 
@@ -144,7 +212,7 @@ const AddBudget = () => {
     });
 
     if (!result.canceled && result.assets?.[0]) {
-      setInvoiceImage(result.assets[0].uri);
+      setInvoice(result.assets[0].uri);
     }
   };
 
@@ -160,7 +228,11 @@ const AddBudget = () => {
 
       {!keyboardVisible && (
         <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
           <Text style={styles.headerText}>Add {type === 'income' ? 'Income' : 'Expense'}</Text>
+          <View style={{ width: 24 }} />
         </View>
       )}
 
@@ -188,14 +260,14 @@ const AddBudget = () => {
                 </TouchableOpacity>
               </View>
 
-              {/* Name */}
+              {/* Title */}
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>NAME</Text>
+                <Text style={styles.label}>TITLE</Text>
                 <TextInput
                   style={styles.input}
-                  value={name}
-                  onChangeText={setName}
-                  placeholder="e.g. Netflix"
+                  value={title}
+                  onChangeText={setTitle}
+                  placeholder="e.g. Netflix Subscription"
                 />
               </View>
 
@@ -252,84 +324,46 @@ const AddBudget = () => {
                 )}
               </View>
 
-              {/* Payment Status */}
-              {type === 'expense' && (
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>PAYMENT STATUS</Text>
-                  <View style={styles.toggleContainer}>
-                    <TouchableOpacity
-                      style={[styles.toggleButton, isPaid && styles.selectedToggle]}
-                      onPress={() => setIsPaid(true)}
-                    >
-                      <Text style={[styles.toggleText, isPaid && styles.selectedText]}>Paid</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.toggleButton, !isPaid && styles.selectedToggle]}
-                      onPress={() => setIsPaid(false)}
-                    >
-                      <Text style={[styles.toggleText, !isPaid && styles.selectedText]}>Pending</Text>
-                    </TouchableOpacity>
-                  </View>
+              {/* Scheduled */}
+              <View style={styles.inputGroup}>
+                <View style={styles.switchContainer}>
+                  <Text style={styles.label}>SCHEDULED</Text>
+                  <Switch
+                    value={isScheduled}
+                    onValueChange={setIsScheduled}
+                    trackColor={{ false: '#767577', true: '#4D9F8D' }}
+                    thumbColor={isScheduled ? '#f4f3f4' : '#f4f3f4'}
+                  />
                 </View>
-              )}
-
-              {/* Recurring */}
-              {type === 'expense' && (
-                <View style={styles.inputGroup}>
-                  <View style={styles.switchContainer}>
-                    <Text style={styles.label}>RECURRING EXPENSE</Text>
-                    <Switch
-                      value={isRecurring}
-                      onValueChange={setIsRecurring}
-                      trackColor={{ false: '#767577', true: '#4D9F8D' }}
-                      thumbColor={isRecurring ? '#f4f3f4' : '#f4f3f4'}
-                    />
-                  </View>
-                  {isRecurring && (
-                    <View style={styles.toggleContainer}>
-                      <TouchableOpacity
-                        style={[styles.toggleButton, recurrenceInterval === 'monthly' && styles.selectedToggle]}
-                        onPress={() => setRecurrenceInterval('monthly')}
-                      >
-                        <Text style={[styles.toggleText, recurrenceInterval === 'monthly' && styles.selectedText]}>Monthly</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.toggleButton, recurrenceInterval === 'weekly' && styles.selectedToggle]}
-                        onPress={() => setRecurrenceInterval('weekly')}
-                      >
-                        <Text style={[styles.toggleText, recurrenceInterval === 'weekly' && styles.selectedText]}>Weekly</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.toggleButton, recurrenceInterval === 'yearly' && styles.selectedToggle]}
-                        onPress={() => setRecurrenceInterval('yearly')}
-                      >
-                        <Text style={[styles.toggleText, recurrenceInterval === 'yearly' && styles.selectedText]}>Yearly</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                </View>
-              )}
+              </View>
 
               {/* Invoice */}
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>INVOICE (OPTIONAL)</Text>
                 <TouchableOpacity style={styles.invoiceButton} onPress={pickImage}>
                   <Text style={styles.invoiceButtonText}>
-                    {invoiceImage ? 'Change Invoice' : 'Add Invoice'}
+                    {invoice ? 'Change Invoice' : 'Add Invoice'}
                   </Text>
                 </TouchableOpacity>
-                {invoiceImage && (
-                  <Image source={{ uri: invoiceImage }} style={styles.invoiceImage} />
+                {invoice && (
+                  <Image source={{ uri: invoice }} style={styles.invoiceImage} />
                 )}
               </View>
 
               {/* Submit Button */}
               <TouchableOpacity 
-                style={styles.addButton} 
-                onPress={handleAddExpense}
-                disabled={!name || !amount}
+                style={[
+                  styles.addButton,
+                  (!title || !amount || isSubmitting) && styles.disabledButton
+                ]} 
+                onPress={handleAddTransaction}
+                disabled={!title || !amount || isSubmitting}
               >
-                <Text style={styles.addButtonText}>Add Transaction</Text>
+                {isSubmitting ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.addButtonText}>Add Transaction</Text>
+                )}
               </TouchableOpacity>
             </View>
           </TouchableWithoutFeedback>
@@ -369,6 +403,9 @@ const AddBudget = () => {
               )}
               numColumns={2}
               contentContainerStyle={styles.categoryGrid}
+              ListEmptyComponent={
+                <Text style={styles.emptyCategoryText}>No categories found. Add a new one!</Text>
+              }
             />
 
             <TouchableOpacity
@@ -429,7 +466,10 @@ const AddBudget = () => {
             />
 
             <TouchableOpacity
-              style={styles.addButton}
+              style={[
+                styles.addButton,
+                !newCategoryName.trim() && styles.disabledButton
+              ]}
               onPress={handleAddNewCategory}
               disabled={!newCategoryName.trim()}
             >
@@ -463,7 +503,13 @@ const styles = StyleSheet.create({
   header: {
     paddingTop: Platform.OS === 'android' ? 40 : 60,
     paddingBottom: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  backButton: {
+    padding: 8,
   },
   headerText: {
     color: '#fff',
@@ -590,6 +636,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 20,
   },
+  disabledButton: {
+    backgroundColor: '#a0cfca',
+    opacity: 0.7,
+  },
   addButtonText: {
     color: '#fff',
     fontSize: 18,
@@ -632,6 +682,11 @@ const styles = StyleSheet.create({
   },
   categoryGrid: {
     paddingBottom: 20,
+  },
+  emptyCategoryText: {
+    textAlign: 'center',
+    padding: 20,
+    color: '#888',
   },
   addCategoryButton: {
     flexDirection: 'row',

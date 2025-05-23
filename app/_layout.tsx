@@ -51,7 +51,7 @@ const slides = [
   },
   {
     key: 'six',
-    title: 'Let’s build a better financial future',
+    title: 'Lets build a better financial future',
     text: 'Start budgeting in under a minute.',
     image: require('@/assets/images/slides/slide6.png'),
   },
@@ -66,26 +66,25 @@ export default function RootLayout() {
 
   const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
 
-useEffect(() => {
-  const checkOnboarding = async () => {
-    const value = await AsyncStorage.getItem('hasSeenOnboarding');
-    setShowOnboarding(value === null); 
-  };
-  checkOnboarding();
-}, []);
+  useEffect(() => {
+    const checkOnboarding = async () => {
+      const value = await AsyncStorage.getItem('hasSeenOnboarding');
+      setShowOnboarding(value === null); 
+    };
+    checkOnboarding();
+  }, []);
 
-useEffect(() => {
-  const setup = async () => {
-    try {
-      await initDatabase();
-      console.log('Database initialized');
-    } catch (e) {
-      console.error('DB init error', e);
-    }
-  };
-  setup();
-}, []);
-
+  useEffect(() => {
+    const setup = async () => {
+      try {
+        await initDatabase();
+        console.log('Database initialized');
+      } catch (e) {
+        console.error('DB init error', e);
+      }
+    };
+    setup();
+  }, []);
 
   useEffect(() => {
     if (loaded && showOnboarding !== null) {
@@ -94,10 +93,9 @@ useEffect(() => {
   }, [loaded, showOnboarding]);
 
   const handleDone = async () => {
-  await AsyncStorage.setItem('hasSeenOnboarding', 'true');
-  setShowOnboarding(false);
-};
-
+    await AsyncStorage.setItem('hasSeenOnboarding', 'true');
+    setShowOnboarding(false);
+  };
 
   const renderSlide = ({ item, index }: { item: typeof slides[0]; index: number }) => {
     const isLastSlide = index === slides.length - 1;
@@ -143,7 +141,9 @@ useEffect(() => {
         <Stack>
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="settings_tabs" options={{ headerShown: false }} />
           <Stack.Screen name="register" options={{ title: 'Register' }} />
+          <Stack.Screen name="ProfileScreen" options={{ headerShown: false }} />
           <Stack.Screen name="+not-found" />
         </Stack>
         <StatusBar style="auto" />

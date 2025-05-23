@@ -1,50 +1,44 @@
-// database.ts
 import { openDatabaseSync } from 'expo-sqlite';
 
 const db = openDatabaseSync('expenses.db');
 
 export const initDatabase = async () => {
-    await db.execAsync(`
-      CREATE TABLE IF NOT EXISTS expenses (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
-        amount REAL,
-        date TEXT,
-        type TEXT,
-        category TEXT,
-        invoiceImage TEXT,
-        isPaid INTEGER,
-        isRecurring INTEGER,
-        recurrenceInterval TEXT
-      );
-    `);
-  };
-  
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT,
+      amount REAL,
+      date TEXT,
+      type TEXT,
+      category TEXT,
+      isScheduled INTEGER,
+      invoice TEXT
+    );
+  `);
+};
 
-export const insertExpense = async (
-  name: string,
+export const insertTransaction = async (
+  title: string,
   amount: number,
   date: string,
   type: string,
   category: string,
-  invoiceImage: string | null,
-  isPaid: boolean,
-  isRecurring: boolean,
-  recurrenceInterval: string | null
+  isScheduled: boolean,
+  invoice: string | null
 ) => {
   await db.runAsync(
-    `INSERT INTO expenses 
-    (name, amount, date, type, category, invoiceImage, isPaid, isRecurring, recurrenceInterval) 
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [name, amount, date, type, category, invoiceImage, isPaid ? 1 : 0, isRecurring ? 1 : 0, recurrenceInterval]
+    `INSERT INTO transactions
+     (title, amount, date, type, category, isScheduled, invoice)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [title, amount, date, type, category, isScheduled ? 1 : 0, invoice]
   );
 };
 
-export const fetchExpenses = async () => {
-  const result = await db.getAllAsync(`SELECT * FROM expenses`);
+export const fetchTransactions = async () => {
+  const result = await db.getAllAsync(`SELECT * FROM transactions`);
   return result;
 };
 
-export const deleteExpense = async (id: number) => {
-  await db.runAsync(`DELETE FROM expenses WHERE id = ?`, [id]);
+export const deleteTransaction = async (id: number) => {
+  await db.runAsync(`DELETE FROM transactions WHERE id = ?`, [id]);
 };

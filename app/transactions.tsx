@@ -1,31 +1,40 @@
-import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  FlatList, 
-  TouchableOpacity, 
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
   Image,
   ScrollView,
   RefreshControl,
-  StatusBar 
+  StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import { useTransactions } from '@/app/context/TransactionContext';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
 
-const TransactionsScreen = () => {
-  const { transactions, deleteTransaction, isLoading, markAsPaid } = useTransactions();
+const TransactionsScreen: React.FC = () => {
+  const { transactions, isLoading, refreshTransactions } = useTransactions();
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'income' | 'expense' | 'pending'>('all');
   const [sortBy, setSortBy] = useState<'date' | 'amount'>('date');
 
+  useEffect(() => {
+    if (refreshTransactions) {
+      refreshTransactions();
+    }
+  }, []);
+
+  // Filtering and sorting transactions
   const filteredTransactions = transactions
     .filter(t => {
       if (filter === 'all') return true;
-      if (filter === 'pending') return t.type === 'expense' && t.isPaid === false;
+      // Since we removed isPaid, pending filter cannot work properly; interpret pending as all expenses for now
+      if (filter === 'pending') return t.type === 'expense';
       return t.type === filter;
     })
     .sort((a, b) => {
@@ -38,48 +47,43 @@ const TransactionsScreen = () => {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    // You could add data reloading logic here if needed
+    if (refreshTransactions) {
+      await refreshTransactions();
+    }
     setRefreshing(false);
   };
 
   const getIconForTransaction = (transaction: any) => {
-    const name = transaction.name.toLowerCase();
+    const name = transaction.title?.toLowerCase() || '';
     if (name.includes('upwork')) return require('@/assets/upwork.png');
     if (name.includes('paypal')) return require('@/assets/paypal.png');
     if (name.includes('youtube')) return require('@/assets/youtube.png');
     if (name.includes('transfer')) return require('@/assets/transfer.png');
-    return transaction.type === 'income' 
-      ? require('@/assets/upwork.png') 
-      : require('@/assets/transfer.png');
+    // fallback icon based on type
+    return transaction.type === 'income'
+      ? require('@/assets/transfer.png')
+      : require('@/assets/profile-avatar.png');
   };
 
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
+  const formatDate = (dateString: string | Date) => {
+    const date = typeof dateString === 'string' ? new Date(dateString) : dateString;
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
       day: 'numeric',
-      year: 'numeric'
+      year: 'numeric',
     });
   };
 
-  const handleDelete = async (id: string) => {
-    try {
-      await deleteTransaction(id);
-    } catch (error) {
-      console.error('Failed to delete transaction:', error);
-    }
-  };
-
   const getPendingCount = () => {
-    return transactions.filter(t => t.type === 'expense' && t.isPaid === false).length;
+    // Without isPaid, pending count means all expenses for now
+    return transactions.filter(t => t.type === 'expense').length;
   };
 
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      
       <View style={styles.container}>
         <StatusBar barStyle="dark-content" backgroundColor="#F5F5F5" />
-        
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()}>
             <Ionicons name="arrow-back" size={24} color="#4D9F8D" />
@@ -156,7 +160,7 @@ const TransactionsScreen = () => {
         >
           {isLoading ? (
             <View style={styles.loadingContainer}>
-              <Text style={styles.loadingText}>Loading transactions...</Text>
+              <ActivityIndicator size="large" color="#4D9F8D" />
             </View>
           ) : filteredTransactions.length === 0 ? (
             <View style={styles.emptyContainer}>
@@ -169,7 +173,7 @@ const TransactionsScreen = () => {
           ) : (
             <FlatList
               data={filteredTransactions}
-              keyExtractor={(item) => item.id}
+              keyExtractor={(item) => item.id.toString()}
               scrollEnabled={false}
               renderItem={({ item }) => (
                 <View style={styles.transactionItem}>
@@ -183,43 +187,15 @@ const TransactionsScreen = () => {
                     {item.category && (
                       <Text style={styles.transactionCategory}>{item.category}</Text>
                     )}
-                    {item.isRecurring && (
-                      <View style={styles.recurringContainer}>
-                        <Ionicons name="repeat" size={12} color="#4D9F8D" />
-                        <Text style={styles.recurringText}>
-                          {item.recurrenceInterval === 'weekly' ? 'Weekly' : 
-                           item.recurrenceInterval === 'monthly' ? 'Monthly' : 'Yearly'}
-                        </Text>
-                      </View>
-                    )}
-                    {item.type === 'expense' && !item.isPaid && (
-                      <Text style={styles.pendingBadge}>Pending</Text>
-                    )}
                   </View>
                   <Text 
                     style={[
                       styles.transactionAmount, 
-                      item.type === 'income' ? styles.income : 
-                      item.isPaid === false ? styles.pending : styles.expense
+                      item.type === 'income' ? styles.income : styles.expense
                     ]}
                   >
                     {item.type === 'income' ? '+' : '-'}${item.amount.toFixed(2)}
                   </Text>
-                  {item.type === 'expense' && !item.isPaid ? (
-                    <TouchableOpacity 
-                      style={styles.payButton}
-                      onPress={() => markAsPaid(item.id)}
-                    >
-                      <Ionicons name="checkmark-circle" size={20} color="#4D9F8D" />
-                    </TouchableOpacity>
-                  ) : (
-                    <TouchableOpacity 
-                      style={styles.deleteButton}
-                      onPress={() => handleDelete(item.id)}
-                    >
-                      <Ionicons name="trash-outline" size={20} color="#FF3B30" />
-                    </TouchableOpacity>
-                  )}
                 </View>
               )}
             />
@@ -364,21 +340,6 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     alignSelf: 'flex-start',
   },
-  recurringContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#E8F4F1',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    alignSelf: 'flex-start',
-    marginTop: 4,
-  },
-  recurringText: {
-    fontSize: 11,
-    color: '#4D9F8D',
-    marginLeft: 4,
-  },
   transactionAmount: {
     fontSize: 16,
     fontWeight: '600',
@@ -390,18 +351,10 @@ const styles = StyleSheet.create({
   expense: {
     color: '#F44336',
   },
-  deleteButton: {
-    padding: 8,
-  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  loadingText: {
-    textAlign: 'center',
-    marginTop: 24,
-    color: '#666',
   },
   emptyContainer: {
     flex: 1,
@@ -413,22 +366,7 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 16,
   },
-  pending: {
-    color: '#FFA500', // Orange for pending
-  },
-  pendingBadge: {
-    fontSize: 12,
-    color: '#FFA500',
-    backgroundColor: '#FFF4E5',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    alignSelf: 'flex-start',
-    marginTop: 4,
-  },
-  payButton: {
-    padding: 8,
-  },
 });
 
 export default TransactionsScreen;
+

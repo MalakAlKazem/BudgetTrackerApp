@@ -1,59 +1,92 @@
-import React from 'react';
-import { View,Dimensions, Text, Image, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import { View, Dimensions, Text, Image, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
 const { width, height } = Dimensions.get('window');
 
-
-const data: { id: string; name: string; icon: "diamond" | "person-outline" | "people-outline" | "mail-outline" | "shield-outline" | "lock-closed-outline" }[] = [
-  { id: '1', name: 'Invite Friends', icon: 'diamond' },
-  { id: '2', name: 'Account info', icon: 'person-outline' },
-  { id: '3', name: 'Personal profile', icon: 'people-outline' },
-  { id: '4', name: 'Message center', icon: 'mail-outline' },
-  { id: '5', name: 'Login and security', icon: 'shield-outline' },
-  { id: '6', name: 'Data and privacy', icon: 'lock-closed-outline' },
-];
+type TabType = 'expenses' | 'incomes' | 'accountInfo' | 'changeLanguage' | 'logout';
 
 const ProfileScreen = () => {
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<TabType>('expenses');
+
+  const handleBackPress = () => {
+    router.back();
+  };
+
+  const navigateToTab = (tab: TabType) => {
+    setActiveTab(tab);
+    switch (tab) {
+      case 'expenses':
+        router.push('/settings_tabs/AllExpanses');
+        break;
+      case 'incomes':
+        router.push('/settings_tabs/AllIncomes');
+        break;
+      case 'accountInfo':
+        router.push('/settings_tabs/AccountInfo');
+        break;
+      case 'changeLanguage':
+        router.push('/settings_tabs/ChangeLanguage');
+        break;
+      case 'logout':
+        Alert.alert('Logout', 'You have been logged out.');
+        break;
+    }
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.backgroundContainer}>
-              <Image
-                source={require('@/assets/Rectangle.png')}
-                style={styles.backgroundImage}
-                resizeMode="cover"
-              />
-            </View>
+        <Image
+          source={require('@/assets/Rectangle.png')}
+          style={styles.backgroundImage}
+          resizeMode="cover"
+        />
+      </View>
       <View style={styles.header}>
-        <Ionicons name="arrow-back" size={28} color="white" style={styles.backIcon} />
+        <TouchableOpacity onPress={handleBackPress} style={styles.backIconContainer}>
+          <Ionicons name="arrow-back" size={28} color="white" />
+        </TouchableOpacity>
         <Text style={styles.profileTitle}>Profile</Text>
-        <Ionicons name="notifications-outline" size={28} color="white" style={styles.notificationIcon}  />
+        <Ionicons name="notifications-outline" size={28} color="white" style={styles.notificationIcon} />
       </View>
       <View style={styles.profileContainer}>
-      <View style={styles.profileSection}>
-        <Image source={require('@/assets/profile-avatar.png')} style={styles.profileImage} resizeMode="cover"/>
-        <Text style={styles.profileName}>Enjelin Morgeana</Text>
-        <Text style={styles.profileUsername}>@enjelin_morgeana</Text>
+        <View style={styles.profileSection}>
+          <Image source={require('@/assets/profile-avatar.png')} style={styles.profileImage} resizeMode="cover" />
+          <Text style={styles.profileName}>Enjelin Morgeana</Text>
+          <Text style={styles.profileUsername}>@enjelin_morgeana</Text>
+        </View>
       </View>
-      </View>
-      <FlatList
-  contentContainerStyle={{ paddingTop: 10 }}
-  data={data}
-  keyExtractor={(item) => item.id}
-  renderItem={({ item }) => (
-    <TouchableOpacity style={styles.menuItem}>
-      <Ionicons name={item.icon} size={24} color="black" />
-      <Text style={styles.menuText}>{item.name}</Text>
-    </TouchableOpacity>
-  )}
-/>
 
+      {/* Vertical Tabs Navigation */}
+      <View style={styles.tabsContainer}>
+        {[
+          { key: 'expenses', label: 'All Expenses' },
+          { key: 'incomes', label: 'All Incomes' },
+          { key: 'accountInfo', label: 'Account Info' },
+          { key: 'changeLanguage', label: 'Change Language' },
+          { key: 'logout', label: 'Logout' },
+        ].map(({ key, label }) => (
+          <TouchableOpacity
+            key={key}
+            style={[styles.tab, activeTab === key && styles.activeTab]}
+            onPress={() => navigateToTab(key as TabType)}
+          >
+            <Text style={[styles.tabText, activeTab === key && styles.activeTabText]}>{label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5', padding: 20 },
+  container: { 
+    flex: 1, 
+    backgroundColor: '#F5F5F5'
+  },
   backgroundContainer: {
     position: 'absolute',
     top: 0,
@@ -73,8 +106,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingTop: 50,
     position: 'relative',
+    paddingHorizontal: 20,
   },
-    profileContainer: {
+  profileContainer: {
     padding: 5,
     marginTop: height * 0.02,
     marginHorizontal: 20,
@@ -84,33 +118,64 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#fff',
   },
-  backIcon: {
+  backIconContainer: {
     position: 'absolute',
     left: 0,
     top: 50,
     paddingHorizontal: 20,
   },
-  
   notificationIcon: {
     position: 'absolute',
     right: 0,
     top: 50,
     paddingHorizontal: 20,
   },
-  
-  profileSection: { alignItems: 'center', marginVertical: 20 , },
+  profileSection: { 
+    alignItems: 'center', 
+    marginVertical: 20,
+  },
   profileImage: {
     width: 110,
     height: 110,
     borderRadius: 60,
-    overflow: 'hidden',      // Add this
     backgroundColor: '#fff',
-    marginTop: 60,     // Optional: helps if image has transparency
+    marginTop: 60,
   },
-  profileName: { fontSize: 20, fontWeight: 'bold', marginTop: 10 },
-  profileUsername: { fontSize: 14, color: 'gray' },
-  menuItem: { flexDirection: 'row', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: '#ddd' },
-  menuText: { fontSize: 16, marginLeft: 10 },
+  profileName: { 
+    fontSize: 20, 
+    fontWeight: 'bold', 
+    marginTop: 10 
+  },
+  profileUsername: { 
+    fontSize: 14, 
+    color: 'gray' 
+  },
+  tabsContainer: {
+    marginHorizontal: 20,
+    marginTop: 30,
+    borderRadius: 10,
+    backgroundColor: '#EAEAEA',
+    overflow: 'hidden',
+    flexDirection: 'column'
+  },
+  tab: {
+    paddingVertical: 15,
+    alignItems: 'center',
+    borderBottomColor: '#ccc',
+    borderBottomWidth: 1,
+  },
+  activeTab: {
+    backgroundColor: '#4D9F8D',
+  },
+  tabText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#555',
+  },
+  activeTabText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
 });
 
 export default ProfileScreen;
