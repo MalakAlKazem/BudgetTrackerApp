@@ -47,9 +47,11 @@ const AddBudget = () => {
   const [selectedIcon, setSelectedIcon] = useState('shopping-bag');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const formatDate = (date: Date): string => {
-    return date.toISOString().split('T')[0];
-  };
+ const formatDate = (date: Date): string => {
+  return date.getFullYear() + '-' + 
+         String(date.getMonth() + 1).padStart(2, '0') + '-' + 
+         String(date.getDate()).padStart(2, '0');
+};
   
   const availableIcons = [
     'shopping-bag', 'utensils', 'bus', 'home', 'tshirt', 'gamepad',
@@ -80,42 +82,48 @@ const AddBudget = () => {
     Keyboard.dismiss();
   };
 
-  const { selectedDate } = useLocalSearchParams();
-  useEffect(() => {
-    if (selectedDate && typeof selectedDate === 'string') {
-      const parsedDate = new Date(selectedDate);
-      setDate(parsedDate);
-      
-      // Auto-check scheduled if it's a future date
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      parsedDate.setHours(0, 0, 0, 0);
-      
-      if (parsedDate > today) {
-        setIsScheduled(true);
-      }
+const { selectedDate } = useLocalSearchParams();
+useEffect(() => {
+  if (selectedDate && typeof selectedDate === 'string') {
+    console.log('Received selectedDate:', selectedDate); // Debug log
+    
+    // Fix: Parse the date string correctly to avoid timezone issues
+    const [year, month, day] = selectedDate.split('-').map(Number);
+    const parsedDate = new Date(year, month - 1, day); // month is 0-indexed
+    
+    console.log('Parsed date:', parsedDate.toDateString()); // Debug log
+    setDate(parsedDate);
+    
+    // Auto-check scheduled if it's a future date
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    parsedDate.setHours(0, 0, 0, 0);
+    
+    if (parsedDate > today) {
+      setIsScheduled(true);
     }
-  }, [selectedDate]);
+  }
+}, [selectedDate]);
 
-  // Check if selected date is in the future and auto-set scheduled
-  const handleDateChange = (selectedDate?: Date) => {
-    if (selectedDate) {
-      setDate(selectedDate);
-      
-      // Auto-check scheduled if it's a future date
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const newDate = new Date(selectedDate);
-      newDate.setHours(0, 0, 0, 0);
-      
-      if (newDate > today) {
-        setIsScheduled(true);
-      } else {
-        setIsScheduled(false);
-      }
+// Also update the handleDateChange function to ensure consistency:
+const handleDateChange = (selectedDate?: Date) => {
+  if (selectedDate) {
+    console.log('Date changed to:', selectedDate.toDateString()); // Debug log
+    setDate(selectedDate);
+    
+    // Auto-check scheduled if it's a future date
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const newDate = new Date(selectedDate);
+    newDate.setHours(0, 0, 0, 0);
+    
+    if (newDate > today) {
+      setIsScheduled(true);
+    } else {
+      setIsScheduled(false);
     }
-  };
-
+  }
+};
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
     const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
@@ -441,7 +449,9 @@ const AddBudget = () => {
                       setDatePickerVisibility(false);
                       if (selectedDate) handleDateChange(selectedDate);
                     }}
+                    
                   />
+                
                 )}
               </View>
 

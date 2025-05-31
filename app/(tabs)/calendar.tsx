@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,20 +10,26 @@ import {
   FlatList,
 } from 'react-native';
 import { Calendar } from 'react-native-calendars';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { fetchTransactions } from '../../utils/database';
 
 const { width, height } = Dimensions.get('window');
 
+interface Transaction {
+  id: number;
+  title: string;
+  amount: number;
+  date: string;
+  type: string;
+  category: string;
+  isScheduled: number;
+  isPaid: number;
+  invoice?: string;
+}
+
 interface SpendingData {
   [date: string]: {
-    transactions: Array<{
-      amount: number;
-      notes: string;
-      isPaid?: boolean;
-      isRecurring?: boolean;
-      recurrenceInterval?: string | null;
-    }>;
+    transactions: Transaction[];
     hasUnpaid: boolean;
   };
 }
@@ -34,30 +40,48 @@ const darkText = '#2F4F4F';
 const unpaidColor = '#FF6B6B';
 
 const CalendarScreen = () => {
-  const [transactions, setTransactions] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [markedDates, setMarkedDates] = useState<Record<string, any>>({});
   const router = useRouter();
   
   // Fetch transactions from the database
-  useEffect(() => {
-    const loadTransactions = async () => {
-      const fetchedTransactions = await fetchTransactions();
-      setTransactions(fetchedTransactions);
-    };
 
-    loadTransactions();
+   const loadTransactions = useCallback(async () => {
+    try {
+      const fetchedTransactions = await fetchTransactions();
+      console.log('Fetched transactions:', fetchedTransactions); // Debug log
+      setTransactions(fetchedTransactions as Transaction[]);
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+    }
   }, []);
 
-  // Process transactions and upcoming unpaid expenses
+  // Load transactions when component mounts
   useEffect(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
+    loadTransactions();
+  }, [loadTransactions]);
+
+  // Refresh transactions when screen comes into focus (when returning from AddBudget)
+  useFocusEffect(
+    useCallback(() => {
+      loadTransactions();
+    }, [loadTransactions])
+  );
+
+
+  // Process transactions and mark calendar dates
+  useEffect(() => {
+    if (transactions.length === 0) {
+      setMarkedDates(selectedDate ? { [selectedDate]: { selected: true, selectedColor: primaryColor } } : {});
+      return;
+    }
+
     // Group transactions by date
     const spendingData = transactions.reduce((acc, transaction) => {
       if (transaction.type === 'expense') {
-        const dateStr = transaction.date.split('T')[0]; // Adjusted to match the date format
+        // Extract date in YYYY-MM-DD format
+        const dateStr = transaction.date.split('T')[0];
 
         if (!acc[dateStr]) {
           acc[dateStr] = {
@@ -66,36 +90,39 @@ const CalendarScreen = () => {
           };
         }
         
-        acc[dateStr].transactions.push({
-          amount: transaction.amount,
-          notes: transaction.title, // Adjusted to match the property name
-          isPaid: transaction.isScheduled === 0, // Assuming isScheduled indicates payment status
-          isRecurring: false, // Adjust as necessary if you have a recurring field
-          recurrenceInterval: null, // Adjust as necessary if you have a recurrence field
-        });
+        acc[dateStr].transactions.push(transaction);
         
-        if (transaction.isScheduled === 0) {
+        // Check if transaction is unpaid (scheduled transactions that haven't been paid)
+        // isPaid = 0 means unpaid, isPaid = 1 means paid
+        if (transaction.isPaid === 0) {
           acc[dateStr].hasUnpaid = true;
         }
       }
       return acc;
     }, {} as SpendingData);
 
-    // Create marked dates
+    console.log('Spending data:', spendingData); // Debug log
+
+    // Create marked dates for calendar
     const newMarkedDates = Object.keys(spendingData).reduce((acc, date) => {
+      const hasUnpaid = spendingData[date].hasUnpaid;
+      
       acc[date] = {
         marked: true,
-        dotColor: spendingData[date].hasUnpaid ? unpaidColor : primaryColor,
+        dotColor: hasUnpaid ? unpaidColor : primaryColor,
         selected: selectedDate === date,
-        selectedColor: spendingData[date].hasUnpaid ? unpaidColor : primaryColor,
+        selectedColor: hasUnpaid ? unpaidColor : primaryColor,
+        selectedTextColor: '#fff'
       };
       return acc;
     }, {} as Record<string, any>);
 
+    // If we have a selected date but no transactions for it, still mark it as selected
     if (selectedDate && !newMarkedDates[selectedDate]) {
       newMarkedDates[selectedDate] = {
         selected: true,
         selectedColor: primaryColor,
+        selectedTextColor: '#fff'
       };
     }
 
@@ -106,46 +133,63 @@ const CalendarScreen = () => {
     setSelectedDate(day.dateString);
   };
 
-  // Get all transactions for selected date
+  // Get all expense transactions for selected date
   const getTransactionsForDate = (date: string) => {
     return transactions.filter(t => {
-      const dateStr = t.date.split('T')[0]; // Adjusted to match the date format
+      const dateStr = t.date.split('T')[0];
       return dateStr === date && t.type === 'expense';
     });
   };
 
-  const handleAddNewExpense = () => {
-    if (selectedDate) {
-      router.push({
-        pathname: '/AddBudget',
-        params: { selectedDate },
-      });
-    }
-  };
-
+  // In calendar.tsx, add this before navigation:
+const handleAddNewExpense = () => {
+  if (selectedDate) {
+    console.log('Calendar: Selected date being passed:', selectedDate);
+    console.log('Calendar: Date object would be:', new Date(selectedDate + 'T12:00:00'));
+    router.push({
+      pathname: '/AddBudget',
+      params: { selectedDate: selectedDate },
+    });
+  }
+};
   const selectedTransactions = selectedDate ? getTransactionsForDate(selectedDate) : [];
 
-  const renderTransactionItem = ({ item }: { item: any }) => (
-    <View style={styles.transactionItem}>
-      <Text style={styles.detailText}>
-        💸 Amount: <Text style={styles.highlight}>${item.amount.toFixed(2)}</Text>
-      </Text>
-      <Text style={styles.detailText}>
-        📝 Note: <Text style={styles.highlight}>{item.notes}</Text>
-      </Text>
-      {item.isPaid === false && (
-        <Text style={[styles.detailText, { color: unpaidColor }]}>
-          ⚠️ This expense is unpaid
-        </Text>
-      )}
-      {item.isRecurring && (
+  const renderTransactionItem = ({ item }: { item: Transaction }) => {
+    const isUnpaid = item.isPaid === 0;
+    const isScheduled = item.isScheduled === 1;
+    
+    return (
+      <View style={styles.transactionItem}>
         <Text style={styles.detailText}>
-          🔄 Recurring: {item.recurrenceInterval}
+          💸 Amount: <Text style={styles.highlight}>${item.amount.toFixed(2)}</Text>
         </Text>
-      )}
-      <View style={styles.separator} />
-    </View>
-  );
+        <Text style={styles.detailText}>
+          📝 Title: <Text style={styles.highlight}>{item.title}</Text>
+        </Text>
+        {item.category && (
+          <Text style={styles.detailText}>
+            🏷️ Category: <Text style={styles.highlight}>{item.category}</Text>
+          </Text>
+        )}
+        {isScheduled && (
+          <Text style={styles.detailText}>
+            📅 Status: <Text style={[styles.highlight, { color: primaryColor }]}>Scheduled</Text>
+          </Text>
+        )}
+        {isUnpaid && (
+          <Text style={[styles.detailText, { color: unpaidColor }]}>
+            ⚠️ This expense is unpaid
+          </Text>
+        )}
+        {!isUnpaid && !isScheduled && (
+          <Text style={[styles.detailText, { color: '#4CAF50' }]}>
+            ✅ Paid
+          </Text>
+        )}
+        <View style={styles.separator} />
+      </View>
+    );
+  };
 
   return (
     <ScrollView style={styles.container}>
@@ -159,6 +203,9 @@ const CalendarScreen = () => {
         </View>
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>📅 Budget Calendar</Text>
+          <Text style={styles.headerSubtitle}>
+            Red dots = Unpaid expenses • Green dots = Paid expenses
+          </Text>
         </View>
       </View>
 
@@ -174,6 +221,9 @@ const CalendarScreen = () => {
             textDayFontFamily: 'System',
             textMonthFontFamily: 'System',
             textDayHeaderFontFamily: 'System',
+            dayTextColor: darkText,
+            monthTextColor: darkText,
+            indicatorColor: primaryColor,
           }}
         />
       </View>
@@ -182,14 +232,22 @@ const CalendarScreen = () => {
         <View style={styles.details}>
           <Text style={styles.dateText}>🗓 {selectedDate}</Text>
           {selectedTransactions.length > 0 ? (
-            <FlatList
-              data={selectedTransactions}
-              renderItem={renderTransactionItem}
-              keyExtractor={(item, index) => item.id || index.toString()}
-              scrollEnabled={false}
-            />
+            <>
+              <Text style={styles.summaryText}>
+                Total expenses: ${selectedTransactions.reduce((sum, t) => sum + t.amount, 0).toFixed(2)}
+                {selectedTransactions.some(t => t.isPaid === 0) && (
+                  <Text style={{ color: unpaidColor }}> (Contains unpaid)</Text>
+                )}
+              </Text>
+              <FlatList
+                data={selectedTransactions}
+                renderItem={renderTransactionItem}
+                keyExtractor={(item, index) => item.id?.toString() || index.toString()}
+                scrollEnabled={false}
+              />
+            </>
           ) : (
-            <Text style={styles.noData}>No spending recorded.</Text>
+            <Text style={styles.noData}>No spending recorded for this date.</Text>
           )}
           <TouchableOpacity style={styles.button} onPress={handleAddNewExpense}>
             <Text style={styles.buttonText}>Add New Expense</Text>
@@ -198,6 +256,18 @@ const CalendarScreen = () => {
       ) : (
         <Text style={styles.selectPrompt}>👆 Tap a date to view spending info.</Text>
       )}
+      
+      <View style={styles.legend}>
+        <Text style={styles.legendTitle}>Legend:</Text>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: unpaidColor }]} />
+          <Text style={styles.legendText}>Unpaid/Scheduled expenses</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: primaryColor }]} />
+          <Text style={styles.legendText}>Paid expenses</Text>
+        </View>
+      </View>
     </ScrollView>
   );
 };
@@ -216,12 +286,19 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: height * 0.05,
     left: 20,
+    right: 20,
   },
   headerTitle: {
     fontSize: 26,
     fontWeight: 'bold',
     color: '#fff',
     marginTop: 4,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#fff',
+    marginTop: 8,
+    opacity: 0.9,
   },
   card: {
     backgroundColor: '#fff',
@@ -256,6 +333,15 @@ const styles = StyleSheet.create({
     color: darkText,
     marginBottom: 10,
   },
+  summaryText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: darkText,
+    marginBottom: 15,
+    padding: 10,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+  },
   detailText: {
     fontSize: 16,
     color: darkText,
@@ -270,11 +356,13 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     color: '#777',
     marginBottom: 10,
+    textAlign: 'center',
+    padding: 20,
   },
   button: {
     marginTop: 12,
     backgroundColor: primaryColor,
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',
   },
@@ -288,6 +376,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
     fontSize: 16,
     color: '#666',
+    marginHorizontal: 20,
   },
   backgroundContainer: {
     position: 'absolute',
@@ -305,12 +394,42 @@ const styles = StyleSheet.create({
   transactionItem: {
     marginBottom: 10,
     paddingBottom: 10,
+    backgroundColor: '#fff',
+    padding: 12,
+    borderRadius: 8,
   },
   separator: {
     height: 1,
     backgroundColor: '#E0E0E0',
-    marginVertical: 10,
+    marginTop: 10,
+  },
+  legend: {
+    backgroundColor: '#fff',
+    marginHorizontal: 20,
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+  },
+  legendTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: darkText,
+    marginBottom: 8,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  legendDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  legendText: {
+    fontSize: 14,
+    color: darkText,
   },
 });
-
 export default CalendarScreen;
