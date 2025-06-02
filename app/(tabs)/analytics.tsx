@@ -45,18 +45,18 @@ export default function StatisticsScreen() {
           <Image source={require("@/assets/Rectangle.png")} style={styles.backgroundImage} resizeMode="cover" />
         </View>
         <View style={styles.headerTextContainer}>
-          <Text style={styles.headerTitle}>📊 Statistics</Text>
+          <Text style={styles.headerTitle}>📊 Analytics</Text>
         </View>
       </View>
 
       <View style={styles.contentContainer}>
         {/* Filter Buttons */}
         <View style={styles.filters}>
-          <TouchableOpacity onPress={() => setTimeframe("month")}>
-            <Text style={timeframe === "month" ? styles.activeFilter : styles.filter}>Month</Text>
-          </TouchableOpacity>
           <TouchableOpacity onPress={() => setTimeframe("week")}>
             <Text style={timeframe === "week" ? styles.activeFilter : styles.filter}>Week</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setTimeframe("month")}>
+            <Text style={timeframe === "month" ? styles.activeFilter : styles.filter}>Month</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setTimeframe("year")}>
             <Text style={timeframe === "year" ? styles.activeFilter : styles.filter}>Year</Text>
@@ -78,13 +78,13 @@ export default function StatisticsScreen() {
         {/* Line Chart - Spending Overview */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Spending Overview</Text>
-          {expenseData.length > 0 ? (
+          {expenseData.length > 0 && expenseData.some(val => val > 0) ? (
             <LineChart
               data={{
                 labels: timeLabels,
                 datasets: [
                   {
-                    data: expenseData,
+                    data: expenseData.length > 0 ? expenseData : [0],
                     color: (opacity = 1) => `rgba(77, 159, 141, ${opacity})`,
                   },
                 ],
@@ -96,20 +96,20 @@ export default function StatisticsScreen() {
               style={styles.chart}
             />
           ) : (
-            <Text style={styles.noDataText}>No expense data available</Text>
+            <Text style={styles.noDataText}>No expense data available for this period</Text>
           )}
         </View>
 
         {/* Bar Chart - Income */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Income</Text>
-          {incomeData.length > 0 ? (
+          <Text style={styles.cardTitle}>Income Overview</Text>
+          {incomeData.length > 0 && incomeData.some(val => val > 0) ? (
             <BarChart
               data={{
                 labels: timeLabels,
                 datasets: [
                   {
-                    data: incomeData,
+                    data: incomeData.length > 0 ? incomeData : [0],
                   },
                 ],
               }}
@@ -122,7 +122,7 @@ export default function StatisticsScreen() {
               fromZero
             />
           ) : (
-            <Text style={styles.noDataText}>No income data available</Text>
+            <Text style={styles.noDataText}>No income data available for this period</Text>
           )}
         </View>
 
@@ -130,30 +130,34 @@ export default function StatisticsScreen() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Expenses by Category</Text>
           {categoryData.length > 0 ? (
-            <PieChart
-              data={categoryData}
-              width={screenWidth - 64}
-              height={200}
-              chartConfig={chartConfig}
-              accessor="value"
-              backgroundColor="transparent"
-              paddingLeft="15"
-              absolute
-            />
-          ) : (
-            <Text style={styles.noDataText}>No category data available</Text>
-          )}
-          <View style={styles.legendContainer}>
-            {categoryData.map((item, index) => (
-              <View key={index} style={styles.legendItem}>
-                <View style={[styles.legendColor, { backgroundColor: item.color }]} />
-                <Text style={styles.legendText}>{item.name}</Text>
+            <>
+              <PieChart
+                data={categoryData}
+                width={screenWidth - 64}
+                height={200}
+                chartConfig={chartConfig}
+                accessor="value"
+                backgroundColor="transparent"
+                paddingLeft="15"
+                absolute
+              />
+              <View style={styles.legendContainer}>
+                {categoryData.map((item, index) => (
+                  <View key={index} style={styles.legendItem}>
+                    <View style={[styles.legendColor, { backgroundColor: item.color }]} />
+                    <Text style={styles.legendText}>
+                      {item.name} (${item.value.toFixed(2)})
+                    </Text>
+                  </View>
+                ))}
               </View>
-            ))}
-          </View>
+            </>
+          ) : (
+            <Text style={styles.noDataText}>No category data available for this period</Text>
+          )}
         </View>
 
-        {/* Top Spending Section */}
+        {/* Recent Transactions Section */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Recent Transactions</Text>
           {recentTransactions.length > 0 ? (
@@ -168,12 +172,19 @@ export default function StatisticsScreen() {
                     {new Date(t.date).toLocaleDateString("en-US", {
                       month: "short",
                       day: "numeric",
+                      year: "numeric",
                     })}
                   </Text>
+                  {t.category && <Text style={styles.transactionCategory}>{t.category}</Text>}
                 </View>
-                <Text style={[styles.transactionAmount, t.type === "income" ? styles.incomeText : styles.expenseText]}>
-                  {t.type === "income" ? "+" : "-"}${t.amount.toFixed(2)}
-                </Text>
+                <View style={styles.transactionAmountContainer}>
+                  <Text style={[styles.transactionAmount, t.type === "income" ? styles.incomeText : styles.expenseText]}>
+                    {t.type === "income" ? "+" : "-"}${t.amount.toFixed(2)}
+                  </Text>
+                  <Text style={[styles.transactionStatus, t.isPaid ? styles.paidStatus : styles.unpaidStatus]}>
+                    {t.isPaid ? "Paid" : "Pending"}
+                  </Text>
+                </View>
               </View>
             ))
           ) : (
@@ -199,68 +210,85 @@ function processTransactionData(transactions: Transaction[], timeframe: string) 
     return result
   }
 
-  // Generate time labels and data based on timeframe
   const now = new Date()
   const dataBuckets: Record<string, { expenses: number; income: number }> = {}
   const categoryBuckets: Record<string, number> = {}
 
-  // Set up time buckets based on timeframe
+  // Set up time buckets and filter transactions based on timeframe
+  let startDate: Date
+  
   if (timeframe === "week") {
     // Last 7 days
-    for (let i = 6; i >= 0; i--) {
-      const date = new Date()
-      date.setDate(now.getDate() - i)
+    startDate = new Date()
+    startDate.setDate(now.getDate() - 6)
+    
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(startDate)
+      date.setDate(startDate.getDate() + i)
       const label = date.toLocaleDateString("en-US", { weekday: "short" })
-      dataBuckets[label] = { expenses: 0, income: 0 }
+      const key = date.toDateString()
+      dataBuckets[key] = { expenses: 0, income: 0 }
     }
   } else if (timeframe === "month") {
-    // Last 4 weeks
-    for (let i = 3; i >= 0; i--) {
-      const weekStart = new Date()
-      weekStart.setDate(now.getDate() - (i * 7 + 6))
-      const label = `Week ${4 - i}`
+    // Last 30 days grouped by week
+    startDate = new Date()
+    startDate.setDate(now.getDate() - 29)
+    
+    // Create 4 weekly buckets
+    for (let week = 0; week < 4; week++) {
+      const weekStart = new Date(startDate)
+      weekStart.setDate(startDate.getDate() + (week * 7))
+      const label = `Week ${week + 1}`
       dataBuckets[label] = { expenses: 0, income: 0 }
     }
   } else if (timeframe === "year") {
-    // Last 6 months
-    for (let i = 5; i >= 0; i--) {
-      const date = new Date()
-      date.setMonth(now.getMonth() - i)
+    // Last 12 months
+    startDate = new Date()
+    startDate.setMonth(now.getMonth() - 11)
+    startDate.setDate(1) // Start from first day of month
+    
+    for (let i = 0; i < 12; i++) {
+      const date = new Date(startDate)
+      date.setMonth(startDate.getMonth() + i)
       const label = date.toLocaleDateString("en-US", { month: "short" })
       dataBuckets[label] = { expenses: 0, income: 0 }
     }
   }
 
-  // Process transactions into the appropriate buckets
-  transactions.forEach((t) => {
-    let bucket = ""
+  // Filter transactions within the timeframe
+  const filteredTransactions = transactions.filter(t => {
     const txDate = new Date(t.date)
+    return txDate >= startDate && txDate <= now
+  })
+
+  // Process filtered transactions into buckets
+  filteredTransactions.forEach((t) => {
+    const txDate = new Date(t.date)
+    let bucketKey = ""
 
     if (timeframe === "week") {
-      // Get day of week
-      bucket = txDate.toLocaleDateString("en-US", { weekday: "short" })
+      bucketKey = txDate.toDateString()
     } else if (timeframe === "month") {
       // Calculate which week this falls into
-      const daysDiff = Math.floor((now.getTime() - txDate.getTime()) / (1000 * 3600 * 24))
-      const weekNum = Math.floor(daysDiff / 7) + 1
-      if (weekNum <= 4) {
-        bucket = `Week ${weekNum}`
+      const daysDiff = Math.floor((txDate.getTime() - startDate.getTime()) / (1000 * 3600 * 24))
+      const weekNum = Math.floor(daysDiff / 7)
+      if (weekNum >= 0 && weekNum < 4) {
+        bucketKey = `Week ${weekNum + 1}`
       }
     } else if (timeframe === "year") {
-      // Get month
-      bucket = txDate.toLocaleDateString("en-US", { month: "short" })
+      bucketKey = txDate.toLocaleDateString("en-US", { month: "short" })
     }
 
-    // Only process transactions that fall within our timeframe
-    if (bucket && dataBuckets[bucket]) {
+    // Only process transactions that fall within our buckets
+    if (bucketKey && dataBuckets[bucketKey]) {
       if (t.type === "expense") {
-        dataBuckets[bucket].expenses += t.amount
-
-        // Also track categories
+        dataBuckets[bucketKey].expenses += t.amount
+        
+        // Track categories for expenses only
         const category = t.category || "Other"
         categoryBuckets[category] = (categoryBuckets[category] || 0) + t.amount
       } else if (t.type === "income") {
-        dataBuckets[bucket].income += t.amount
+        dataBuckets[bucketKey].income += t.amount
       }
     }
   })
@@ -270,33 +298,38 @@ function processTransactionData(transactions: Transaction[], timeframe: string) 
   const expenseData = timeLabels.map((label) => dataBuckets[label].expenses)
   const incomeData = timeLabels.map((label) => dataBuckets[label].income)
 
+  // For week view, use short day names
+  if (timeframe === "week") {
+    const shortLabels = timeLabels.map(dateString => {
+      const date = new Date(dateString)
+      return date.toLocaleDateString("en-US", { weekday: "short" })
+    })
+    result.timeLabels = shortLabels
+  } else {
+    result.timeLabels = timeLabels
+  }
+
+  result.expenseData = expenseData
+  result.incomeData = incomeData
+
   // Generate color palette for categories
   const colorPalette = [
-    "#4D9F8D",
-    "#FF9500",
-    "#5856D6",
-    "#FF2D55",
-    "#34C759",
-    "#007AFF",
-    "#AF52DE",
-    "#FF3B30",
-    "#FFD60A",
-    "#5AC8FA",
+    "#4D9F8D", "#FF9500", "#5856D6", "#FF2D55", "#34C759", 
+    "#007AFF", "#AF52DE", "#FF3B30", "#FFD60A", "#5AC8FA"
   ]
 
-  // Convert categories to pie chart format
-  const categoryData = Object.keys(categoryBuckets).map((category, index) => ({
-    name: category,
-    value: categoryBuckets[category],
-    color: colorPalette[index % colorPalette.length],
-  }))
+  // Convert categories to pie chart format (only if there are expenses)
+  const categoryData = Object.keys(categoryBuckets)
+    .filter(category => categoryBuckets[category] > 0)
+    .map((category, index) => ({
+      name: category,
+      value: categoryBuckets[category],
+      color: colorPalette[index % colorPalette.length],
+    }))
 
-  return {
-    timeLabels,
-    expenseData,
-    incomeData,
-    categoryData,
-  }
+  result.categoryData = categoryData
+
+  return result
 }
 
 const styles = StyleSheet.create({
@@ -344,16 +377,16 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   filter: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     borderRadius: 20,
     backgroundColor: "#e0e0e0",
     color: "#343A40",
     fontWeight: "500",
   },
   activeFilter: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     backgroundColor: "#4D9F8D",
     color: "#fff",
     borderRadius: 20,
@@ -471,10 +504,35 @@ const styles = StyleSheet.create({
   transactionDate: {
     fontSize: 12,
     color: "#888",
+    marginBottom: 1,
+  },
+  transactionCategory: {
+    fontSize: 11,
+    color: "#4D9F8D",
+    fontWeight: "500",
+  },
+  transactionAmountContainer: {
+    alignItems: "flex-end",
   },
   transactionAmount: {
     fontSize: 16,
     fontWeight: "600",
+    marginBottom: 2,
+  },
+  transactionStatus: {
+    fontSize: 10,
+    fontWeight: "500",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  paidStatus: {
+    backgroundColor: "#E8F5E8",
+    color: "#34C759",
+  },
+  unpaidStatus: {
+    backgroundColor: "#FFF2F2",
+    color: "#FF3B30",
   },
   incomeText: {
     color: "#34C759",

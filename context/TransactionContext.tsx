@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { fetchTransactions, updateTransactionPaidStatus } from '../utils/database';
+import { fetchTransactions, updateTransactionPaidStatus, migrateCategoryData } from '../utils/database';
 
 // Define our interfaces
 export interface Category {
@@ -63,8 +63,18 @@ const defaultCategories: Category[] = [
   { id: '7', name: 'Salary', icon: 'money-bill-wave', type: 'income' },
   { id: '8', name: 'Freelance', icon: 'laptop', type: 'income' },
   { id: '9', name: 'Investments', icon: 'piggy-bank', type: 'income' },
-  { id: '10', name: 'Gifts', icon: 'gift', type: 'income' }
+  { id: '10', name: 'Gifts', icon: 'gift', type: 'income' },
+  { id: '11', name: 'Other', icon: 'ellipsis', type: 'both' }
 ];
+
+// Helper function to ensure category name is valid
+const validateCategoryName = (categoryName: string | undefined): string => {
+  if (!categoryName) return 'Other';
+  
+  // Check if it's a valid category name
+  const validCategory = defaultCategories.find(cat => cat.name === categoryName);
+  return validCategory ? categoryName : 'Other';
+};
 
 // Provider component
 export const TransactionProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -77,13 +87,25 @@ export const TransactionProvider: React.FC<{ children: ReactNode }> = ({ childre
 
   // Load transactions initially
   useEffect(() => {
-    refreshTransactions();
+    initializeData();
   }, []);
 
   // Calculate totals whenever transactions change
   useEffect(() => {
     calculateTotals();
   }, [transactions]);
+
+  const initializeData = async () => {
+    try {
+      // Run migration to ensure categories are stored as names
+      await migrateCategoryData();
+      // Then refresh transactions
+      await refreshTransactions();
+    } catch (error) {
+      console.error('Error initializing data:', error);
+      setIsLoading(false);
+    }
+  };
 
   const calculateTotals = () => {
     let incomeTotal = 0;
@@ -120,7 +142,7 @@ export const TransactionProvider: React.FC<{ children: ReactNode }> = ({ childre
           amount: t.amount,
           date: new Date(t.date),
           type: t.type as 'income' | 'expense',
-          category: t.category,
+          category: validateCategoryName(t.category), // Ensure valid category name
           isPaid: !!t.isPaid,
           isRecurring: !!t.isRecurring,
           recurrenceInterval: t.recurrenceInterval,
@@ -144,7 +166,8 @@ export const TransactionProvider: React.FC<{ children: ReactNode }> = ({ childre
     
     const newTransaction: Transaction = {
       ...transaction,
-      id: tempId
+      id: tempId,
+      category: validateCategoryName(transaction.category) // Ensure valid category
     };
     
     // Update local state immediately for better UX
@@ -178,9 +201,6 @@ export const TransactionProvider: React.FC<{ children: ReactNode }> = ({ childre
             : transaction
         )
       );
-      
-      // Optionally refresh from database to ensure consistency
-      // await refreshTransactions();
     } catch (err) {
       console.error('Failed to mark transaction as paid:', err);
       // Revert local state if database update failed
