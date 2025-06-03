@@ -11,13 +11,13 @@ import {
   StatusBar,
   ActivityIndicator,
 } from 'react-native';
-import { useTransactions } from '../context/TransactionContext';
+import { useTransactions} from '../context/TransactionContext';
 import { useRouter } from 'expo-router';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
 
 const TransactionsScreen: React.FC = () => {
-  const { transactions, categories, isLoading, refreshTransactions, markTransactionAsPaid } = useTransactions();
+  const { transactions, categories, isLoading, refreshTransactions, markTransactionAsPaid, deleteTransaction } = useTransactions();
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'income' | 'expense' | 'pending'>('all');
@@ -75,6 +75,7 @@ const TransactionsScreen: React.FC = () => {
       }
     }
 
+
     // Fallback to name-based icons
     const name = transaction.name?.toLowerCase() || '';
     if (name.includes('upwork')) return require('@/assets/upwork.png');
@@ -108,6 +109,13 @@ const TransactionsScreen: React.FC = () => {
       console.error('Error marking transaction as paid:', error);
     }
   };
+  const handleDeleteTransaction = async (id: string) => {
+  try {
+    await deleteTransaction(id);
+  } catch (e) {
+    console.error("Failed to delete:", e);
+  }
+};
 
   const renderTransactionIcon = (transaction: any) => {
     const iconSource = getIconForTransaction(transaction);
@@ -247,6 +255,7 @@ const TransactionsScreen: React.FC = () => {
                     <View style={styles.transactionInfo}>
                       <Text style={styles.transactionName}>{item.name}</Text>
                       <Text style={styles.transactionDate}>{formatDate(item.date)}</Text>
+                     
                       {categoryInfo && (
                         <Text style={styles.transactionCategory}>{categoryInfo.name}</Text>
                       )}
@@ -273,6 +282,10 @@ const TransactionsScreen: React.FC = () => {
                           <Text style={styles.markPaidButtonText}>Mark Paid</Text>
                         </TouchableOpacity>
                       )}
+                       {/* TRASH ICON BELOW PRICE */}
+           <TouchableOpacity onPress={() => handleDeleteTransaction(item.id)}>
+  <Ionicons name="trash-bin" size={20} color="#B00020" />
+</TouchableOpacity>
                     </View>
                   </View>
                 );

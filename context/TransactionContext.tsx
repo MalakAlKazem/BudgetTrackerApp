@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { fetchTransactions, updateTransactionPaidStatus, migrateCategoryData } from '../utils/database';
+import { fetchTransactions, updateTransactionPaidStatus, migrateCategoryData,deleteTransactionFromSQLite,
+  deleteTransactionFromFirestore, } from '../utils/database';
 
 // Define our interfaces
 export interface Category {
@@ -47,6 +48,7 @@ interface TransactionContextType {
   addCategory: (category: Omit<Category, 'id'>) => Promise<Category>;
   isLoading: boolean;
   markTransactionAsPaid: (id: string) => Promise<void>;
+    deleteTransaction: (transactionId: string) => Promise<void>; // Added deleteTransaction
 }
 
 // Create the context
@@ -176,6 +178,7 @@ export const TransactionProvider: React.FC<{ children: ReactNode }> = ({ childre
     // Return the new transaction
     return Promise.resolve(newTransaction);
   };
+  
 
   // Add a new category
   const addCategory = async (category: Omit<Category, 'id'>): Promise<Category> => {
@@ -208,6 +211,22 @@ export const TransactionProvider: React.FC<{ children: ReactNode }> = ({ childre
     }
   };
 
+const deleteTransaction = async (transactionId: string) => {
+  const idNum = parseInt(transactionId, 10);
+  try {
+    // 1. Delete locally
+    await deleteTransactionFromSQLite(idNum);
+
+    // 2. Delete (or soft‐delete) in Firestore
+    await deleteTransactionFromFirestore(idNum);
+
+    // 3. Remove from React state
+    setTransactions((prev) => prev.filter((t) => t.id !== transactionId));
+  } catch (error) {
+    console.error("Error deleting transaction:", error);
+    throw error;
+  }
+};
   const value = {
     transactions,
     categories,
@@ -218,7 +237,8 @@ export const TransactionProvider: React.FC<{ children: ReactNode }> = ({ childre
     addTransaction,
     addCategory,
     isLoading,
-    markTransactionAsPaid
+    markTransactionAsPaid,
+    deleteTransaction,
   };
 
   return (
@@ -230,9 +250,7 @@ export const TransactionProvider: React.FC<{ children: ReactNode }> = ({ childre
 
 // Custom hook to use the context
 export const useTransactions = () => {
-  const context = useContext(TransactionContext);
-  if (context === undefined) {
-    throw new Error('useTransactions must be used within a TransactionProvider');
-  }
-  return context;
+  const ctx = useContext(TransactionContext);
+  if (!ctx) throw new Error("useTransactions must be inside provider");
+  return ctx;
 };

@@ -257,6 +257,7 @@ function processTransactionData(transactions: Transaction[], timeframe: string) 
 
   // Filter transactions within the timeframe
   const filteredTransactions = transactions.filter(t => {
+    console.log('Processing transaction category:', t.category);
     const txDate = new Date(t.date)
     return txDate >= startDate && txDate <= now
   })
