@@ -25,13 +25,16 @@ import * as ImagePicker from 'expo-image-picker';
 import { Category, useTransactions } from '../../context/TransactionContext';
 import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { insertTransaction } from '../../utils/database';
-import * as Notifications from 'expo-notifications';
+import { useAuth } from '../../context/AuthContext';
+import { Button } from 'react-native-paper';
+import { BackHandler } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 
 const AddBudget = () => {
   const router = useRouter();
-  const { addTransaction, categories, addCategory, refreshTransactions } = useTransactions();
+  const { addTransaction, categories, addCategory, refreshTransactions, transactions, updateTransaction } = useTransactions();
+  const { user } = useAuth();
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(new Date());
@@ -61,6 +64,7 @@ const AddBudget = () => {
     'money-bill-wave', 'piggy-bank', 'hand-holding-usd'
   ];
 
+
   // Enhanced clear function that resets everything to initial state
   const clearFormCompletely = () => {
     setTitle('');
@@ -82,29 +86,141 @@ const AddBudget = () => {
     Keyboard.dismiss();
   };
 
-const { selectedDate } = useLocalSearchParams();
+const { selectedDate, transactionId, categoryName,  transactionName,
+  transactionAmount,
+  transactionType,
+  transactionDate,
+  isRecurring,
+  invoiceImage,
+  duplicateMode} = useLocalSearchParams();
+
 useEffect(() => {
-  if (selectedDate && typeof selectedDate === 'string') {
-    console.log('Received selectedDate:', selectedDate); // Debug log
+  if (transactionId && typeof transactionId === 'string' && transactions.length > 0) {
+    // Find the transaction to edit
+    const transactionToEdit = transactions.find(t => t.id === transactionId);
+
+    if (transactionToEdit) {
+      console.log('Found transaction to edit:', transactionToEdit); // Debug log
+      console.log('Available categories:', categories); // Debug log
+      
+      // Populate the form fields with the transaction data
+      setTitle(transactionToEdit.name || '');
+      setAmount(transactionToEdit.amount?.toString() || '');
+      setDate(transactionToEdit.date ? new Date(transactionToEdit.date) : new Date());
+      setType(transactionToEdit.type || 'expense');
+      setIsScheduled(!!transactionToEdit.isRecurring);
+      setInvoice(transactionToEdit.invoiceImage || null);
+
+      // Find and set the category object by name
+      if (transactionToEdit.category) {
+        const category = categories.find(cat => cat.name === transactionToEdit.category);
+        console.log('Found category:', category); // Debug log
+        if (category) {
+          setSelectedCategory(category);
+        } else {
+          // If category not found, try to find "Other" category
+          const otherCategory = categories.find(cat => cat.name === 'Other');
+          setSelectedCategory(otherCategory || null);
+        }
+      }
+    }
+  } 
+  else if (duplicateMode === 'true') {
+    // NEW: Handle "Spend Again" functionality
+    console.log('Spending again with data:', {
+      transactionName,
+      transactionAmount,
+      transactionType,
+      categoryName,
+      transactionDate,
+      isRecurring,
+      invoiceImage
+    });
+     // Pre-populate form with transaction data for spending again
+    if (transactionName && typeof transactionName === 'string') {
+      setTitle(transactionName);
+    }
     
-    // Fix: Parse the date string correctly to avoid timezone issues
+    if (transactionAmount && typeof transactionAmount === 'string') {
+      setAmount(transactionAmount);
+    }
+    if (transactionType && typeof transactionType === 'string') {
+      setType(transactionType as 'expense' | 'income');
+    }
+    
+    // Set today's date for new transaction (not the original date)
+    setDate(new Date());
+    
+    if (isRecurring && typeof isRecurring === 'string') {
+      setIsScheduled(isRecurring === 'true');
+    }
+    
+    if (invoiceImage && typeof invoiceImage === 'string' && invoiceImage !== '') {
+      setInvoice(invoiceImage);
+    }
+       // Set category if provided
+    if (categoryName && typeof categoryName === 'string' && categories.length > 0) {
+      const category = categories.find(cat => 
+        cat.name.toLowerCase() === categoryName.toLowerCase()
+      );
+      if (category) {
+        setSelectedCategory(category);
+      }
+    }
+  }
+  else if (selectedDate && typeof selectedDate === 'string') {
+    // Existing logic for setting date from selectedDate params
     const [year, month, day] = selectedDate.split('-').map(Number);
-    const parsedDate = new Date(year, month - 1, day); // month is 0-indexed
-    
-    console.log('Parsed date:', parsedDate.toDateString()); // Debug log
+    const parsedDate = new Date(year, month - 1, day);
     setDate(parsedDate);
-    
-    // Auto-check scheduled if it's a future date
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     parsedDate.setHours(0, 0, 0, 0);
-    
+
     if (parsedDate > today) {
       setIsScheduled(true);
     }
-  }
-}, [selectedDate]);
+  }  // NEW: Handle category selection from HomeScreen
+    if (categoryName && typeof categoryName === 'string' && categories.length > 0) {
+      const category = categories.find(cat => 
+        cat.name.toLowerCase() === categoryName.toLowerCase()
+      );
+      
+      if (category) {
+        console.log('Pre-selecting category from HomeScreen:', category);
+        setSelectedCategory(category);
+        
+        // Set the type based on the category type if it's not 'both'
+        if (category.type === 'income' || category.type === 'expense') {
+          setType(category.type);
+        }
+      } else {
+        console.log('Category not found, available categories:', categories.map(c => c.name));
+      }
+    } 
+if (!transactionId && !selectedDate && !categoryName) {
+      clearFormCompletely();
+    }
+  }, [selectedDate, transactionId, categoryName, transactionName,
+  transactionAmount,
+  transactionType,
+  transactionDate,
+  isRecurring,
+  invoiceImage,
+  duplicateMode,
+  transactions, 
+  categories]); // Add dependencies
 
+useEffect(() => {
+  const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+    // Always clear form and go back - no alert needed for hardware button
+    clearFormCompletely();
+    return false; // Allow default behavior (go back)
+  });
+
+  return () => backHandler.remove();
+}, []);
 // Also update the handleDateChange function to ensure consistency:
 const handleDateChange = (selectedDate?: Date) => {
   if (selectedDate) {
@@ -134,105 +250,41 @@ const handleDateChange = (selectedDate?: Date) => {
     };
   }, []);
 
-  // Request notifications permission on component mount
-  useEffect(() => {
-    const requestNotificationsPermission = async () => {
-      if (Platform.OS === 'ios' || Platform.OS === 'android') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        if (status !== 'granted') {
-          console.log('Notification permissions not granted');
-        }
-      }
-    };
-    
-    requestNotificationsPermission();
-  }, []);
-
-  const scheduleReminderNotification = async (transactionTitle: string, transactionType: string, transactionDate: Date) => {
-    try {
-      // Calculate the reminder date (1 day before transaction date)
-      const reminderDate = new Date(transactionDate);
-      reminderDate.setDate(reminderDate.getDate() - 1);
-      reminderDate.setHours(22, 48, 0, 0); // Set reminder time to 9 AM
-
-      // Only schedule if reminder date is in the future
-      const now = new Date();
-      if (reminderDate > now) {
-        // Calculate seconds until the reminder date
-        const secondsUntilReminder = Math.max(1, Math.floor((reminderDate.getTime() - Date.now()) / 1000));
-
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title: 'Upcoming Transaction Reminder',
-            body: `Tomorrow you have a scheduled ${transactionType}: "${transactionTitle}" for $${amount}`,
-            sound: true,
-          },
-          trigger: {
-            seconds: secondsUntilReminder,
-            repeats: false,
-          } as Notifications.TimeIntervalTriggerInput,
-        });
-
-        console.log(`Reminder scheduled for ${reminderDate.toLocaleString()} (in ${secondsUntilReminder} seconds)`);
-      }
-    } catch (error) {
-      console.error('Error scheduling reminder notification:', error);
-    }
-  };
-
-  const scheduleNotification = async (transactionTitle: string, transactionType: string) => {
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: 'Transaction Added',
-        body: `Your ${transactionType} "${transactionTitle}" has been successfully added!`,
-      },
-      trigger: null, // Send immediately
-    });
-  };
-
-  const handleAddTransaction = async () => {
-    if (!title || !amount) {
-      Alert.alert('Error', 'Please fill in all required fields');
+  const handleSubmit = async () => {
+    if (!title || !amount || !selectedCategory) {
+      Alert.alert('Error', 'Please fill in all fields');
       return;
     }
 
-    const amountValue = parseFloat(amount);
-    if (isNaN(amountValue)) {
-      Alert.alert('Error', 'Please enter a valid amount');
-      return;
-    }
-
-    setIsSubmitting(true);
-    
     try {
-      // Insert into local SQLite database first
-      const transactionId = await insertTransaction(
-        title,
-        amountValue,
-        date.toISOString(),
-        type,
-        selectedCategory?.id || '',
-        isScheduled,
-        invoice
-      );
-
-      // Create a transaction object for the context
-      const newTransaction = {
-        id: transactionId,
+      const transactionData = {
         name: title,
-        amount: amountValue,
-        date: date,
-        type: type,
-        category: selectedCategory?.id || '',
-        isPaid: isScheduled ? false : true,
+        amount: parseFloat(amount),
+        type,
+        category: selectedCategory.id,
+        date: new Date(date),
+        isScheduled,
+        userId: user?.uid,
+        createdAt: new Date().toISOString(),
+        isPaid: !isScheduled,
         isRecurring: isScheduled,
         recurrenceInterval: isScheduled ? 'monthly' : null,
         invoiceImage: invoice
       };
 
+      await insertTransaction(
+        title,
+        parseFloat(amount),
+        date.toISOString(),
+        type,
+        selectedCategory.id,
+        isScheduled,
+        invoice
+      );
+
       // Add to context (in memory)
       try {
-        await addTransaction(newTransaction);
+        await addTransaction(transactionData);
       } catch (contextError) {
         console.warn('Context update failed, but transaction was saved to database:', contextError);
       }
@@ -241,52 +293,12 @@ const handleDateChange = (selectedDate?: Date) => {
       if (refreshTransactions) {
         await refreshTransactions();
       }
-        
-      // Schedule reminder notification if it's a scheduled transaction
-      if (isScheduled) {
-        try {
-          await scheduleReminderNotification(title, type, date);
-        } catch (notificationError) {
-          console.warn('Failed to schedule notification:', notificationError);
-        }
-      }
-        
-      // Show immediate success notification
-      try {
-        await scheduleNotification(title, type);
-      } catch (notificationError) {
-        console.warn('Failed to show success notification:', notificationError);
-      }
 
-      const successMessage = isScheduled 
-        ? `Transaction scheduled successfully! You'll receive a reminder one day before the due date.`
-        : 'Transaction saved successfully';
-
-      // Reset the submitting state before showing the alert
-      setIsSubmitting(false);
-
-      Alert.alert(
-        'Success', 
-        successMessage,
-        [
-          { 
-            text: 'Add Another', 
-            onPress: () => {
-              clearFormCompletely(); // Use the enhanced clear function
-            } 
-          },
-          { 
-            text: 'Go to Home', 
-            onPress: () => {
-              router.replace('/');
-            }
-          }
-        ]
-      );
+      Alert.alert('Success', 'Transaction added successfully');
+      router.back();
     } catch (error) {
-      console.error('Error saving transaction:', error);
-      Alert.alert('Error', 'Failed to save transaction. Please try again.');
-      setIsSubmitting(false);
+      console.error('Error adding transaction:', error);
+      Alert.alert('Error', 'Failed to add transaction');
     }
   };
 
@@ -336,6 +348,54 @@ const handleDateChange = (selectedDate?: Date) => {
   };
 
   const filteredCategories = categories.filter(cat => cat.type === type || cat.type === 'both');
+
+  // Also update the handleSubmit function to handle updates
+  const handleUpdateTransaction = async () => {
+    if (!title || !amount || !selectedCategory || !transactionId || typeof transactionId !== 'string') {
+      Alert.alert('Error', 'Please fill in all fields and ensure transaction ID is present.');
+      return;
+    }
+
+    try {
+        setIsSubmitting(true);
+        const updatedTransactionData = {
+            id: transactionId as string,
+            name: title,
+            amount: parseFloat(amount),
+            type,
+            category: selectedCategory.name,
+            date: new Date(date),
+            isRecurring: isScheduled,
+            userId: user?.uid,
+            createdAt: new Date().toISOString(),
+            isPaid: !isScheduled,
+            recurrenceInterval: isScheduled ? 'monthly' : null,
+            invoiceImage: invoice
+        };
+
+        // Update the transaction using the context function
+        await updateTransaction(updatedTransactionData);
+        
+        Alert.alert('Success', 'Transaction updated successfully');
+        router.back();
+    } catch (error) {
+        console.error('Error updating transaction:', error);
+        Alert.alert('Error', 'Failed to update transaction');
+    } finally {
+        setIsSubmitting(false);
+    }
+  };
+
+  // Modify handleSubmit to call either add or update
+  const handleFinalSubmit = async () => {
+    if (transactionId) {
+        // If transactionId exists, call the update handler
+        handleUpdateTransaction();
+    } else {
+        // Otherwise, call the existing add handler
+        handleSubmit(); // This is your original handleSubmit function
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -475,16 +535,6 @@ const handleDateChange = (selectedDate?: Date) => {
                 </View>
               </View>
 
-              {/* Reminder Info */}
-              {isScheduled && (
-                <View style={styles.reminderInfo}>
-                  <Ionicons name="notifications-outline" size={16} color="#4D9F8D" />
-                  <Text style={styles.reminderText}>
-                    You'll receive a reminder one day before this transaction
-                  </Text>
-                </View>
-              )}
-
               {/* Invoice */}
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>INVOICE (OPTIONAL)</Text>
@@ -499,33 +549,16 @@ const handleDateChange = (selectedDate?: Date) => {
               </View>
 
               {/* Submit Button */}
-              <TouchableOpacity 
-                style={[
-                  styles.addButton,
-                  (!title || !amount || isSubmitting) && styles.disabledButton
-                ]} 
-                onPress={() => {
-                  handleAddTransaction();
-                  clearFormCompletely();
-                }}
-                disabled={!title || !amount || isSubmitting}
+              <Button
+                mode="contained"
+                onPress={handleFinalSubmit}
+                loading={isSubmitting}
+                disabled={isSubmitting}
+                style={styles.addButton}
+                labelStyle={styles.addButtonLabel}
               >
-                {isSubmitting ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <Text style={styles.addButtonText}>
-                    {isScheduled ? 'Schedule Transaction' : 'Add Transaction'}
-                  </Text>
-                )}
-              </TouchableOpacity>
-
-              {/* Clear Button
-              <TouchableOpacity 
-                style={styles.clearButton} 
-                onPress={clearFormCompletely}
-              >
-                <Text style={styles.clearButtonText}>Clear All</Text>
-              </TouchableOpacity> */}
+                {transactionId ? 'Save Changes' : (isScheduled ? 'Schedule Transaction' : 'Add Transaction')}
+              </Button>
             </View>
           </TouchableWithoutFeedback>
         </ScrollView>
@@ -917,6 +950,10 @@ const styles = StyleSheet.create({
   },
   selectedIconItem: {
     backgroundColor: '#e0f2f1',
+  },
+  addButtonLabel: {
+    fontSize: 18,
+    fontWeight: 'bold',
   },
 });
 

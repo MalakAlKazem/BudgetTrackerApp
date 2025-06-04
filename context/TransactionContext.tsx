@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { fetchTransactions, updateTransactionPaidStatus, migrateCategoryData,deleteTransactionFromSQLite,
-  deleteTransactionFromFirestore, } from '../utils/database';
+import { fetchTransactions, updateTransactionPaidStatus, migrateCategoryData, deleteTransactionFromSQLite,
+  deleteTransactionFromFirestore, updateTransaction as updateTransactionInDatabase } from '../utils/database';
+import { useAuth } from './AuthContext'; // Import useAuth
 
 // Define our interfaces
 export interface Category {
@@ -48,7 +49,8 @@ interface TransactionContextType {
   addCategory: (category: Omit<Category, 'id'>) => Promise<Category>;
   isLoading: boolean;
   markTransactionAsPaid: (id: string) => Promise<void>;
-    deleteTransaction: (transactionId: string) => Promise<void>; // Added deleteTransaction
+  deleteTransaction: (transactionId: string) => Promise<void>;
+  updateTransaction: (transaction: Transaction) => Promise<void>;
 }
 
 // Create the context
@@ -87,10 +89,22 @@ export const TransactionProvider: React.FC<{ children: ReactNode }> = ({ childre
   const [balance, setBalance] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Load transactions initially
+  const { user } = useAuth(); // Access the user from AuthContext
+
+  // Load transactions initially and when user logs in
   useEffect(() => {
-    initializeData();
-  }, []);
+    if (user) {
+      // Only initialize/refresh data if user is logged in
+      initializeData();
+    } else {
+      // Clear data if user logs out
+      setTransactions([]);
+      setTotalIncome(0);
+      setTotalExpenses(0);
+      setBalance(0);
+      setIsLoading(false);
+    }
+  }, [user]); // Depend on user state
 
   // Calculate totals whenever transactions change
   useEffect(() => {
@@ -227,6 +241,34 @@ const deleteTransaction = async (transactionId: string) => {
     throw error;
   }
 };
+
+const updateTransaction = async (transaction: Transaction) => {
+  try {
+    // Update in database
+    await updateTransactionInDatabase(
+      parseInt(transaction.id),
+      transaction.name,
+      transaction.amount,
+      transaction.date.toISOString(),
+      transaction.type,
+      transaction.category || 'Other',
+      !!transaction.isRecurring,
+      transaction.invoiceImage ?? null
+    );
+
+    // Update local state
+    setTransactions(prev =>
+      prev.map(t => (t.id === transaction.id ? transaction : t))
+    );
+
+    // Refresh transactions to ensure consistency
+    await refreshTransactions();
+  } catch (error) {
+    console.error('Error updating transaction:', error);
+    throw error;
+  }
+};
+
   const value = {
     transactions,
     categories,
@@ -239,6 +281,7 @@ const deleteTransaction = async (transactionId: string) => {
     isLoading,
     markTransactionAsPaid,
     deleteTransaction,
+    updateTransaction,
   };
 
   return (

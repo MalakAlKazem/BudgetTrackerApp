@@ -14,11 +14,12 @@ import {
 import { useRouter } from 'expo-router';
 import { Category, useTransactions } from '../context/TransactionContext';
 import { FontAwesome5, Ionicons } from '@expo/vector-icons';
+import transactions from './transactions'; // Ensure transactions is exported as an array from './transactions'
 
 const { width } = Dimensions.get('window');
 
 const CategoriesScreen = () => {
-  const { categories, addCategory, deleteCategory, getDefaultCategories } = useTransactions();
+  const { transactions,categories, addCategory, deleteCategory, getDefaultCategories } = useTransactions();
   const [newCategory, setNewCategory] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -83,6 +84,43 @@ const CategoriesScreen = () => {
     );
   };
 
+  const categoryItem = ({ item }: { item: Category }) => (
+  <TouchableOpacity 
+    style={styles.categoryItem}
+    onPress={() => {
+      // Navigate to category transactions
+      router.push({
+        pathname: '/category-transactions',
+        params: {
+          categoryName: item.name,
+          categoryIcon: item.icon,
+          categoryType: item.type,
+        }
+      });
+    }}
+  ><View style={styles.categoryInfo}>
+      <FontAwesome5 name={item.icon} size={20} color="#4D9F8D" />
+      <Text style={styles.categoryText}>{item.name}</Text>
+    </View>
+    
+    <View style={styles.categoryActions}>
+      {/* Show transaction count */}
+      <Text style={styles.transactionCount}>
+  {transactions.filter(t => t.category === item.name).length}
+      </Text>
+      
+      <TouchableOpacity 
+        style={styles.deleteButton}
+        onPress={(e) => {
+          e.stopPropagation(); // Prevent navigation when deleting
+          handleDeleteCategory(item);
+        }}
+      >
+        <Ionicons name="trash-outline" size={20} color="#FF6B6B" />
+      </TouchableOpacity>
+    </View>
+  </TouchableOpacity>
+);
   const filteredCategories = categories.filter(
     cat => cat.type === type || cat.type === 'both'
   );
@@ -92,6 +130,7 @@ const CategoriesScreen = () => {
     setSelectedIcon('shopping-bag');
     setType('expense');
   };
+  
 
   return (
     <View style={styles.container}>
@@ -128,20 +167,7 @@ const CategoriesScreen = () => {
       <FlatList
         data={filteredCategories}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View style={styles.categoryItem}>
-            <View style={styles.categoryInfo}>
-              <FontAwesome5 name={item.icon} size={20} color="#4D9F8D" />
-              <Text style={styles.categoryText}>{item.name}</Text>
-            </View>
-            <TouchableOpacity 
-              style={styles.deleteButton}
-              onPress={() => handleDeleteCategory(item)}
-            >
-              <Ionicons name="trash-outline" size={20} color="#FF6B6B" />
-            </TouchableOpacity>
-          </View>
-        )}
+        renderItem={categoryItem}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <FontAwesome5 name="folder-open" size={40} color="#ddd" />
@@ -327,6 +353,17 @@ const styles = StyleSheet.create({
   },
   deleteButton: {
     padding: 8,
+  },
+  categoryActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  transactionCount: {
+    fontSize: 14,
+    color: '#666',
+    marginRight: 15,
+    minWidth: 20,
+    textAlign: 'center',
   },
   emptyContainer: {
     alignItems: 'center',

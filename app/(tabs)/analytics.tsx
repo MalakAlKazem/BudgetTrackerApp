@@ -1,12 +1,54 @@
 "use client"
 
-import { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { View, Text, StyleSheet, Dimensions, ScrollView, Image, TouchableOpacity } from "react-native"
 import { LineChart, BarChart, PieChart } from "react-native-chart-kit"
 import { type Transaction, useTransactions } from "../../context/TransactionContext"
 
 const screenWidth = Dimensions.get("window").width
 const { width, height } = Dimensions.get("window")
+
+// Update getCategoryColor function with more distinct colors
+const getCategoryColor = (category: string): string => {
+  const colorMap: { [key: string]: string } = {
+    '1': '#FF6B6B', // Food - Red
+    '2': '#4ECDC4', // Transport - Teal
+    '3': '#FFD93D', // Shopping - Yellow
+    '4': '#95E1D3', // Entertainment - Mint
+    '5': '#FF8B94', // Bills - Pink
+    '6': '#6C5CE7', // Health - Purple
+    '7': '#A8E6CF', // Education - Light Green
+    '8': '#FFB6B9', // Other - Light Pink
+  };
+  return colorMap[category] || '#4D9F8D';
+};
+
+// Add getCategoryName function
+const getCategoryName = (category: string): string => {
+  const categoryMap: { [key: string]: string } = {
+    '1': 'Food',
+    '2': 'Transport',
+    '3': 'Shopping',
+    '4': 'Entertainment',
+    '5': 'Bills',
+    '6': 'Health',
+    '7': 'Education',
+    '8': 'Other',
+  };
+  return categoryMap[category] || 'Other';
+};
+
+// Add categoryNameToIdMap
+const categoryNameToIdMap: { [key: string]: string } = {
+  'Food': '1',
+  'Transport': '2',
+  'Shopping': '3',
+  'Entertainment': '4',
+  'Bills': '5',
+  'Health': '6',
+  'Education': '7',
+  'Other': '8',
+};
 
 const chartConfig = {
   backgroundColor: "#ffffff",
@@ -19,10 +61,24 @@ const chartConfig = {
     borderRadius: 16,
   },
   propsForDots: {
-    r: "5",
+    r: "6",
     strokeWidth: "2",
     stroke: "#4D9F8D",
   },
+  propsForBackgroundLines: {
+    strokeDasharray: "", // solid lines
+    stroke: "#E5E5E5",
+    strokeWidth: 1,
+  },
+  propsForLabels: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  yAxisLabel: "$",
+  yAxisSuffix: "",
+  formatYLabel: (yLabel: string) => `$${yLabel}`,
+  count: 5, // Number of horizontal lines
+  formatXLabel: (value: string) => value,
 }
 
 export default function StatisticsScreen() {
@@ -79,22 +135,30 @@ export default function StatisticsScreen() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Spending Overview</Text>
           {expenseData.length > 0 && expenseData.some(val => val > 0) ? (
-            <LineChart
-              data={{
-                labels: timeLabels,
-                datasets: [
-                  {
-                    data: expenseData.length > 0 ? expenseData : [0],
-                    color: (opacity = 1) => `rgba(77, 159, 141, ${opacity})`,
-                  },
-                ],
-              }}
-              width={screenWidth - 64}
-              height={200}
-              chartConfig={chartConfig}
-              bezier
-              style={styles.chart}
-            />
+            <ScrollView horizontal showsHorizontalScrollIndicator={true}>
+              <LineChart
+                data={{
+                  labels: timeLabels,
+                  datasets: [
+                    {
+                      data: expenseData.length > 0 ? expenseData : [0],
+                      color: (opacity = 1) => `rgba(77, 159, 141, ${opacity})`,
+                      strokeWidth: 2,
+                    },
+                  ],
+                }}
+                width={screenWidth * 1.8} // Increased width for scrolling
+                height={220}
+                chartConfig={chartConfig}
+                bezier
+                style={styles.chart}
+                withDots={true}
+                withShadow={true}
+                withVerticalLabels={true}
+                withHorizontalLabels={true}
+                fromZero={true}
+              />
+            </ScrollView>
           ) : (
             <Text style={styles.noDataText}>No expense data available for this period</Text>
           )}
@@ -104,23 +168,28 @@ export default function StatisticsScreen() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Income Overview</Text>
           {incomeData.length > 0 && incomeData.some(val => val > 0) ? (
-            <BarChart
-              data={{
-                labels: timeLabels,
-                datasets: [
-                  {
-                    data: incomeData.length > 0 ? incomeData : [0],
-                  },
-                ],
-              }}
-              width={screenWidth - 64}
-              height={200}
-              yAxisLabel="$"
-              yAxisSuffix=""
-              chartConfig={chartConfig}
-              style={styles.chart}
-              fromZero
-            />
+            <ScrollView horizontal showsHorizontalScrollIndicator={true}>
+              <BarChart
+                data={{
+                  labels: timeLabels,
+                  datasets: [
+                    {
+                      data: incomeData.length > 0 ? incomeData : [0],
+                    },
+                  ],
+                }}
+                width={screenWidth * 1.8} // Increased width for scrolling
+                height={220}
+                yAxisLabel=""
+                yAxisSuffix=""
+                chartConfig={chartConfig}
+                style={styles.chart}
+                fromZero={true}
+                showValuesOnTopOfBars={true}
+                withVerticalLabels={true}
+                withHorizontalLabels={true}
+              />
+            </ScrollView>
           ) : (
             <Text style={styles.noDataText}>No income data available for this period</Text>
           )}
@@ -134,19 +203,21 @@ export default function StatisticsScreen() {
               <PieChart
                 data={categoryData}
                 width={screenWidth - 64}
-                height={200}
+                height={220}
                 chartConfig={chartConfig}
                 accessor="value"
                 backgroundColor="transparent"
                 paddingLeft="15"
                 absolute
+                hasLegend={false}
+                center={[(screenWidth - 64) / 4, 0]}
               />
               <View style={styles.legendContainer}>
                 {categoryData.map((item, index) => (
                   <View key={index} style={styles.legendItem}>
                     <View style={[styles.legendColor, { backgroundColor: item.color }]} />
                     <Text style={styles.legendText}>
-                      {item.name} (${item.value.toFixed(2)})
+                      {item.name}: ${item.value.toFixed(2)}
                     </Text>
                   </View>
                 ))}
@@ -198,139 +269,121 @@ export default function StatisticsScreen() {
 
 // Process transaction data for charts based on timeframe
 function processTransactionData(transactions: Transaction[], timeframe: string) {
-  // Default return structure
-  const result = {
-    timeLabels: [] as string[],
-    expenseData: [] as number[],
-    incomeData: [] as number[],
-    categoryData: [] as Array<{ name: string; value: number; color: string }>,
-  }
-
-  if (!transactions || transactions.length === 0) {
-    return result
-  }
-
   const now = new Date()
-  const dataBuckets: Record<string, { expenses: number; income: number }> = {}
-  const categoryBuckets: Record<string, number> = {}
-
-  // Set up time buckets and filter transactions based on timeframe
-  let startDate: Date
+  const startDate = new Date()
   
-  if (timeframe === "week") {
-    // Last 7 days
-    startDate = new Date()
-    startDate.setDate(now.getDate() - 6)
-    
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(startDate)
-      date.setDate(startDate.getDate() + i)
-      const label = date.toLocaleDateString("en-US", { weekday: "short" })
-      const key = date.toDateString()
-      dataBuckets[key] = { expenses: 0, income: 0 }
-    }
-  } else if (timeframe === "month") {
-    // Last 30 days grouped by week
-    startDate = new Date()
-    startDate.setDate(now.getDate() - 29)
-    
-    // Create 4 weekly buckets
-    for (let week = 0; week < 4; week++) {
-      const weekStart = new Date(startDate)
-      weekStart.setDate(startDate.getDate() + (week * 7))
-      const label = `Week ${week + 1}`
-      dataBuckets[label] = { expenses: 0, income: 0 }
-    }
-  } else if (timeframe === "year") {
-    // Last 12 months
-    startDate = new Date()
-    startDate.setMonth(now.getMonth() - 11)
-    startDate.setDate(1) // Start from first day of month
-    
-    for (let i = 0; i < 12; i++) {
-      const date = new Date(startDate)
-      date.setMonth(startDate.getMonth() + i)
-      const label = date.toLocaleDateString("en-US", { month: "short" })
-      dataBuckets[label] = { expenses: 0, income: 0 }
-    }
+  // Initialize with default values
+  let bucketSize = 1
+  let bucketCount = 7
+  let bucketLabels: string[] = []
+
+  // Set timeframe parameters
+  switch (timeframe) {
+    case "week":
+      startDate.setDate(now.getDate() - 7)
+      bucketSize = 1 // 1 day
+      bucketCount = 7
+      // Generate labels for each day
+      bucketLabels = Array.from({ length: 7 }, (_, i) => {
+        const date = new Date(startDate)
+        date.setDate(date.getDate() + i)
+        return date.toLocaleDateString("en-US", { weekday: "short" })
+      })
+      break
+    case "month":
+      // Set to first day of current month
+      startDate.setDate(1)
+      startDate.setHours(0, 0, 0, 0)
+      bucketSize = 7 // 7 days
+      bucketCount = 4
+      // Generate labels for each week
+      bucketLabels = Array.from({ length: 4 }, (_, i) => {
+        const weekStart = new Date(startDate)
+        weekStart.setDate(weekStart.getDate() + (i * 7))
+        const weekEnd = new Date(weekStart)
+        weekEnd.setDate(weekEnd.getDate() + 6)
+        return `${weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })} - ${weekEnd.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+      })
+      break
+    case "year":
+      // Set to first day of current year
+      startDate.setMonth(0)
+      startDate.setDate(1)
+      startDate.setHours(0, 0, 0, 0)
+      bucketSize = 30 // 30 days
+      bucketCount = 12
+      // Generate labels for each month
+      bucketLabels = Array.from({ length: 12 }, (_, i) => {
+        const date = new Date(startDate)
+        date.setMonth(date.getMonth() + i)
+        return date.toLocaleDateString("en-US", { month: "short" })
+      })
+      break
   }
 
-  // Filter transactions within the timeframe
-  const filteredTransactions = transactions.filter(t => {
-    console.log('Processing transaction category:', t.category);
-    const txDate = new Date(t.date)
-    return txDate >= startDate && txDate <= now
+  // Initialize buckets with the correct size
+  const expenseBuckets = Array(bucketCount).fill(0)
+  const incomeBuckets = Array(bucketCount).fill(0)
+  const categoryData: { [key: string]: number } = {}
+
+  // Process transactions
+  transactions.forEach((transaction) => {
+    const transactionDate = new Date(transaction.date)
+    if (transactionDate >= startDate && transactionDate <= now) {
+      let bucketIndex: number
+      
+      if (timeframe === "month") {
+        // For month view, calculate which week the transaction falls into
+        const dayOfMonth = transactionDate.getDate()
+        bucketIndex = Math.floor((dayOfMonth - 1) / 7)
+      } else if (timeframe === "year") {
+        // For year view, use the month as the bucket index
+        bucketIndex = transactionDate.getMonth()
+      } else {
+        // For week view, use the existing calculation
+        const daysDiff = Math.floor((transactionDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
+        bucketIndex = Math.floor(daysDiff / bucketSize)
+      }
+
+      if (bucketIndex >= 0 && bucketIndex < bucketCount) {
+        if (transaction.type === "expense") {
+          expenseBuckets[bucketIndex] += transaction.amount
+          // Track category data - use category ID as key
+          const categoryName = transaction.category?.toString() || 'Other'
+          const categoryId = categoryNameToIdMap[categoryName] || '8' // Get ID, default to '8' (Other)
+          categoryData[categoryId] = (categoryData[categoryId] || 0) + transaction.amount
+          
+          // Debug log to see the raw category name and the ID used
+          console.log(`Processing expense transaction ID: ${transaction.id}, Category Name: ${categoryName}, Mapped Category ID: ${categoryId}`)
+        } else if (transaction.type === "income") {
+          incomeBuckets[bucketIndex] += transaction.amount
+        }
+      }
+    }
   })
 
-  // Process filtered transactions into buckets
-  filteredTransactions.forEach((t) => {
-    const txDate = new Date(t.date)
-    let bucketKey = ""
-
-    if (timeframe === "week") {
-      bucketKey = txDate.toDateString()
-    } else if (timeframe === "month") {
-      // Calculate which week this falls into
-      const daysDiff = Math.floor((txDate.getTime() - startDate.getTime()) / (1000 * 3600 * 24))
-      const weekNum = Math.floor(daysDiff / 7)
-      if (weekNum >= 0 && weekNum < 4) {
-        bucketKey = `Week ${weekNum + 1}`
-      }
-    } else if (timeframe === "year") {
-      bucketKey = txDate.toLocaleDateString("en-US", { month: "short" })
-    }
-
-    // Only process transactions that fall within our buckets
-    if (bucketKey && dataBuckets[bucketKey]) {
-      if (t.type === "expense") {
-        dataBuckets[bucketKey].expenses += t.amount
-        
-        // Track categories for expenses only
-        const category = t.category || "Other"
-        categoryBuckets[category] = (categoryBuckets[category] || 0) + t.amount
-      } else if (t.type === "income") {
-        dataBuckets[bucketKey].income += t.amount
-      }
-    }
-  })
-
-  // Convert buckets to arrays for charts
-  const timeLabels = Object.keys(dataBuckets)
-  const expenseData = timeLabels.map((label) => dataBuckets[label].expenses)
-  const incomeData = timeLabels.map((label) => dataBuckets[label].income)
-
-  // For week view, use short day names
-  if (timeframe === "week") {
-    const shortLabels = timeLabels.map(dateString => {
-      const date = new Date(dateString)
-      return date.toLocaleDateString("en-US", { weekday: "short" })
-    })
-    result.timeLabels = shortLabels
-  } else {
-    result.timeLabels = timeLabels
-  }
-
-  result.expenseData = expenseData
-  result.incomeData = incomeData
-
-  // Generate color palette for categories
-  const colorPalette = [
-    "#4D9F8D", "#FF9500", "#5856D6", "#FF2D55", "#34C759", 
-    "#007AFF", "#AF52DE", "#FF3B30", "#FFD60A", "#5AC8FA"
-  ]
-
-  // Convert categories to pie chart format (only if there are expenses)
-  const categoryData = Object.keys(categoryBuckets)
-    .filter(category => categoryBuckets[category] > 0)
-    .map((category, index) => ({
-      name: category,
-      value: categoryBuckets[category],
-      color: colorPalette[index % colorPalette.length],
+  // Convert category data to array and sort by amount
+  const categoryChartData = Object.entries(categoryData)
+    .filter(([_, amount]) => amount > 0) // Only include categories with expenses
+    .map(([categoryId, amount]) => ({
+      name: getCategoryName(categoryId), // Use categoryId here
+      value: amount,
+      color: getCategoryColor(categoryId), // Use categoryId here
+      legendFontColor: '#2F4F4F',
+      legendFontSize: 12
     }))
+    .sort((a, b) => b.value - a.value)
 
-  result.categoryData = categoryData
+  // Debug log to check category data
+  console.log('Category Data (with IDs as keys):', categoryData)
+  console.log('Category Chart Data:', categoryChartData)
 
-  return result
+  return {
+    timeLabels: bucketLabels,
+    expenseData: expenseBuckets,
+    incomeData: incomeBuckets,
+    categoryData: categoryChartData
+  }
 }
 
 const styles = StyleSheet.create({
@@ -453,26 +506,30 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
   },
   legendContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
     marginTop: 15,
+    paddingHorizontal: 10,
+    paddingBottom: 10, // Added padding at the bottom
   },
   legendItem: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     marginRight: 15,
     marginBottom: 8,
+    minWidth: '45%',
   },
   legendColor: {
     width: 12,
     height: 12,
     borderRadius: 6,
-    marginRight: 5,
+    marginRight: 8,
   },
   legendText: {
-    fontSize: 12,
-    color: "#666",
+    fontSize: 13,
+    color: '#2F4F4F',
+    fontWeight: '500',
   },
   transactionItem: {
     flexDirection: "row",

@@ -1,6 +1,7 @@
+import React from 'react';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
@@ -11,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TransactionProvider } from '../context/TransactionContext';
 import { initDatabase } from '../utils/database';
-import { AuthProvider } from '../context/AuthContext';
+import { AuthProvider, useAuth } from '../context/AuthContext';
 
 const AppIntroSlider: any = require('react-native-app-intro-slider').default;
 
@@ -58,6 +59,45 @@ const slides = [
   },
 ];
 
+function RootLayoutNav() {
+  const { isAuthenticated } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+  const colorScheme = useColorScheme();
+
+  useEffect(() => {
+    const inAuthGroup = segments[0] === '(tabs)' || segments[0] === 'settings_tabs';
+    const isTransactionsRoute = segments[0] === 'transactions';
+    const isCategoriesRoute = segments[0] === 'categories'; // Add this line
+    const isCategoryTransactionsRoute = segments[0] === 'category-transactions'; // Corrected to match the valid union type
+    const isEditTransactionRoute = segments[0] === 'edit-transaction'; // Add this
+
+  if (!isAuthenticated && (inAuthGroup || isTransactionsRoute || isCategoriesRoute || isCategoryTransactionsRoute || isEditTransactionRoute)) {
+    router.replace('/');
+  } else if (isAuthenticated && (!inAuthGroup && !isTransactionsRoute && !isCategoriesRoute && !isCategoryTransactionsRoute && !isEditTransactionRoute)) {
+    router.replace('/(tabs)');
+  }
+}, [isAuthenticated, segments]);
+
+  return (
+    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <Stack>
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="settings_tabs" options={{ headerShown: false }} />
+        <Stack.Screen name="register" options={{ title: 'Register' }} />
+        <Stack.Screen name="transactions" options={{ title: 'All Transactions', headerShown: false }} />
+        <Stack.Screen name="categories" options={{ title: 'All Categories', headerShown: false }} />
+        <Stack.Screen name="category-transactions" options={{ title: 'All Categories transactions', headerShown: false }} />
+        <Stack.Screen name="edit-transaction" options={{ title: 'Edit Transactions', headerShown: false }} />
+
+        <Stack.Screen name="+not-found" />
+      </Stack>
+      <StatusBar style="auto" />
+    </ThemeProvider>
+  );
+}
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
 
@@ -66,6 +106,7 @@ export default function RootLayout() {
   });
 
   const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
+  const [isDatabaseInitialized, setIsDatabaseInitialized] = useState(false);
 
   useEffect(() => {
     const checkOnboarding = async () => {
@@ -76,10 +117,15 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
+    if (!isDatabaseInitialized) {
+      setIsDatabaseInitialized(true);
+    }
+  }, [isDatabaseInitialized]);
+
+  useEffect(() => {
     const setup = async () => {
       try {
         await initDatabase();
-        console.log('Database initialized');
       } catch (e) {
         console.error('DB init error', e);
       }
@@ -139,17 +185,7 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <TransactionProvider>
-        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <Stack>
-            <Stack.Screen name="index" options={{ headerShown: false }} />
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="settings_tabs" options={{ headerShown: false }} />
-            <Stack.Screen name="register" options={{ title: 'Register' }} />
-            <Stack.Screen name="ProfileScreen" options={{ headerShown: false }} />
-            <Stack.Screen name="+not-found" />
-          </Stack>
-          <StatusBar style="auto" />
-        </ThemeProvider>
+        <RootLayoutNav />
       </TransactionProvider>
     </AuthProvider>
   );
