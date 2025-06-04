@@ -6,50 +6,69 @@ import { HapticTab } from '@/components/HapticTab';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from "@react-navigation/native";
 
 const PRIMARY_COLOR = '#4D9F8D';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const [hideTabBar, setHideTabBar] = useState(false);
+ const [loading, setLoading] = useState(true);
+  // useEffect(() => {
+  //   let hideInterval: NodeJS.Timeout;
 
-  useEffect(() => {
-    let hideInterval: NodeJS.Timeout;
+  //   const hideNavigationBar = async () => {
+  //     if (Platform.OS === 'android') {
+  //       try {
+  //         await NavigationBar.setBehaviorAsync('inset-swipe');
+  //         await NavigationBar.setVisibilityAsync('hidden');
+  //       } catch (error) {
+  //         console.warn('NavigationBar error:', error);
+  //       }
+  //     }
+  //   };
 
-    const hideNavigationBar = async () => {
-      if (Platform.OS === 'android') {
+  //   // Initial hide
+  //   hideNavigationBar();
+
+  //   // Re-hide periodically (useful for Android system UI visibility resets)
+  //   hideInterval = setInterval(hideNavigationBar, 3000);
+
+  //   // Hide tab bar when keyboard appears
+  //   const keyboardDidShow = Keyboard.addListener('keyboardDidShow', () => {
+  //     setHideTabBar(true);
+  //     hideNavigationBar();
+  //   });
+
+  //   const keyboardDidHide = Keyboard.addListener('keyboardDidHide', () => {
+  //     setHideTabBar(false);
+  //     hideNavigationBar();
+  //   });
+
+    useFocusEffect(
+    React.useCallback(() => {
+      const hideNavigationBar = async () => {
         try {
-          await NavigationBar.setBehaviorAsync('inset-swipe');
-          await NavigationBar.setVisibilityAsync('hidden');
+          await NavigationBar.setVisibilityAsync("hidden");
         } catch (error) {
-          console.warn('NavigationBar error:', error);
+          console.error("Failed to hide navigation bar:", error);
         }
+      };
+
+      if (Platform.OS === "android") {
+        hideNavigationBar();
       }
-    };
 
-    // Initial hide
-    hideNavigationBar();
+      setLoading(false);
+    }, [])
+  );
 
-    // Re-hide periodically (useful for Android system UI visibility resets)
-    hideInterval = setInterval(hideNavigationBar, 3000);
-
-    // Hide tab bar when keyboard appears
-    const keyboardDidShow = Keyboard.addListener('keyboardDidShow', () => {
-      setHideTabBar(true);
-      hideNavigationBar();
-    });
-
-    const keyboardDidHide = Keyboard.addListener('keyboardDidHide', () => {
-      setHideTabBar(false);
-      hideNavigationBar();
-    });
-
-    return () => {
-      clearInterval(hideInterval);
-      keyboardDidShow.remove();
-      keyboardDidHide.remove();
-    };
-  }, []);
+  //   return () => {
+  //     clearInterval(hideInterval);
+  //     keyboardDidShow.remove();
+  //     keyboardDidHide.remove();
+  //   };
+  // }, []);
 
   return (
     <Tabs

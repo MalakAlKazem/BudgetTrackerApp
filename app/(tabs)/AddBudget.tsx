@@ -22,16 +22,17 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
-import { Category, useTransactions } from '@/app/context/TransactionContext';
+import { Category, useTransactions } from '../../context/TransactionContext';
 import { FontAwesome5, Ionicons } from '@expo/vector-icons';
-import { insertTransaction } from '../utils/database';
-import * as Notifications from 'expo-notifications';
+import { insertTransaction } from '../../utils/database';
+import { useAuth } from '../../context/AuthContext';
 
 const { width, height } = Dimensions.get('window');
 
 const AddBudget = () => {
   const router = useRouter();
   const { addTransaction, categories, addCategory, refreshTransactions } = useTransactions();
+  const { user } = useAuth();
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(new Date());
@@ -47,9 +48,11 @@ const AddBudget = () => {
   const [selectedIcon, setSelectedIcon] = useState('shopping-bag');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const formatDate = (date: Date): string => {
-    return date.toISOString().split('T')[0];
-  };
+ const formatDate = (date: Date): string => {
+  return date.getFullYear() + '-' + 
+         String(date.getMonth() + 1).padStart(2, '0') + '-' + 
+         String(date.getDate()).padStart(2, '0');
+};
   
   const availableIcons = [
     'shopping-bag', 'utensils', 'bus', 'home', 'tshirt', 'gamepad',
@@ -59,13 +62,69 @@ const AddBudget = () => {
     'money-bill-wave', 'piggy-bank', 'hand-holding-usd'
   ];
 
-  const { selectedDate } = useLocalSearchParams();
-  useEffect(() => {
-    if (selectedDate && typeof selectedDate === 'string') {
-      setDate(new Date(selectedDate));
-    }
-  }, [selectedDate]);
+  // Enhanced clear function that resets everything to initial state
+  const clearFormCompletely = () => {
+    setTitle('');
+    setAmount('');
+    setSelectedCategory(null);
+    setInvoice(null);
+    setDate(new Date());
+    setIsScheduled(false);
+    setType('expense'); // Reset to default
+    setNewCategoryName('');
+    setSelectedIcon('shopping-bag');
+    
+    // Close any open modals
+    setCategoryModalVisible(false);
+    setAddCategoryModalVisible(false);
+    setDatePickerVisibility(false);
+    
+    // Dismiss keyboard if open
+    Keyboard.dismiss();
+  };
 
+const { selectedDate } = useLocalSearchParams();
+useEffect(() => {
+  if (selectedDate && typeof selectedDate === 'string') {
+    console.log('Received selectedDate:', selectedDate); // Debug log
+    
+    // Fix: Parse the date string correctly to avoid timezone issues
+    const [year, month, day] = selectedDate.split('-').map(Number);
+    const parsedDate = new Date(year, month - 1, day); // month is 0-indexed
+    
+    console.log('Parsed date:', parsedDate.toDateString()); // Debug log
+    setDate(parsedDate);
+    
+    // Auto-check scheduled if it's a future date
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    parsedDate.setHours(0, 0, 0, 0);
+    
+    if (parsedDate > today) {
+      setIsScheduled(true);
+    }
+  }
+}, [selectedDate]);
+
+// Also update the handleDateChange function to ensure consistency:
+const handleDateChange = (selectedDate?: Date) => {
+  if (selectedDate) {
+    console.log('Date changed to:', selectedDate.toDateString()); // Debug log
+    setDate(selectedDate);
+    
+    // Auto-check scheduled if it's a future date
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const newDate = new Date(selectedDate);
+    newDate.setHours(0, 0, 0, 0);
+    
+    if (newDate > today) {
+      setIsScheduled(true);
+    } else {
+      setIsScheduled(false);
+    }
+  }
+};
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
     const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
@@ -76,107 +135,55 @@ const AddBudget = () => {
     };
   }, []);
 
-  // Request notifications permission on component mount
-  useEffect(() => {
-    const requestNotificationsPermission = async () => {
-      if (Platform.OS === 'ios' || Platform.OS === 'android') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        if (status !== 'granted') {
-          console.log('Notification permissions not granted');
-        }
-      }
-    };
-    
-    requestNotificationsPermission();
-  }, []);
-
-  const scheduleNotification = async (transactionTitle: string, transactionType: string) => {
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: 'Transaction Added',
-        body: `Your ${transactionType} "${transactionTitle}" has been successfully added!`,
-      },
-      trigger: null, // Send immediately
-    });
-  };
-
-  const handleAddTransaction = async () => {
-    if (!title || !amount) {
-      Alert.alert('Error', 'Please fill in all required fields');
+  const handleSubmit = async () => {
+    if (!title || !amount || !selectedCategory) {
+      Alert.alert('Error', 'Please fill in all fields');
       return;
     }
 
-    const amountValue = parseFloat(amount);
-    if (isNaN(amountValue)) {
-      Alert.alert('Error', 'Please enter a valid amount');
-      return;
-    }
-
-    setIsSubmitting(true);
-    
     try {
-      // Insert into local SQLite database
-      const transactionId = await insertTransaction(
-        title,
-        amountValue,
-        date.toISOString(),
-        type,
-        selectedCategory?.id || '',
-        isScheduled,
-        invoice
-      );
-
-      // Create a transaction object for the context
-      const newTransaction = {
-        id: transactionId,
+      const transactionData = {
         name: title,
-        amount: amountValue,
-        date: date,
-        type: type,
-        category: selectedCategory?.id || '',
-        isPaid: true,
+        amount: parseFloat(amount),
+        type,
+        category: selectedCategory.id,
+        date: new Date(date),
+        isScheduled,
+        userId: user?.uid,
+        createdAt: new Date().toISOString(),
+        isPaid: !isScheduled,
         isRecurring: isScheduled,
         recurrenceInterval: isScheduled ? 'monthly' : null,
         invoiceImage: invoice
       };
-      
+
+      await insertTransaction(
+        title,
+        parseFloat(amount),
+        date.toISOString(),
+        type,
+        selectedCategory.id,
+        isScheduled,
+        invoice
+      );
+
       // Add to context (in memory)
-      addTransaction(newTransaction);
-      
+      try {
+        await addTransaction(transactionData);
+      } catch (contextError) {
+        console.warn('Context update failed, but transaction was saved to database:', contextError);
+      }
+        
       // Trigger refresh in other components
       if (refreshTransactions) {
-        refreshTransactions();
+        await refreshTransactions();
       }
-      
-      // Show notification
-      await scheduleNotification(title, type);
 
-      Alert.alert(
-        'Success', 
-        'Transaction saved successfully',
-        [
-          { 
-            text: 'Add Another', 
-            onPress: () => {
-              setTitle('');
-              setAmount('');
-              setSelectedCategory(null);
-              setInvoice(null);
-              setIsSubmitting(false);
-            } 
-          },
-          { 
-            text: 'Go to Home', 
-            onPress: () => {
-              router.replace('/'); // Navigate back to home screen
-            }
-          }
-        ]
-      );
+      Alert.alert('Success', 'Transaction added successfully');
+      router.back();
     } catch (error) {
-      console.error('Error saving transaction:', error);
-      Alert.alert('Error', 'Failed to save transaction');
-      setIsSubmitting(false);
+      console.error('Error adding transaction:', error);
+      Alert.alert('Error', 'Failed to add transaction');
     }
   };
 
@@ -216,6 +223,15 @@ const AddBudget = () => {
     }
   };
 
+  // Helper function to check if date is in the future
+  const isFutureDate = (selectedDate: Date) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const checkDate = new Date(selectedDate);
+    checkDate.setHours(0, 0, 0, 0);
+    return checkDate > today;
+  };
+
   const filteredCategories = categories.filter(cat => cat.type === type || cat.type === 'both');
 
   return (
@@ -232,7 +248,12 @@ const AddBudget = () => {
             <Ionicons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
           <Text style={styles.headerText}>Add {type === 'income' ? 'Income' : 'Expense'}</Text>
-          <View style={{ width: 24 }} />
+          <TouchableOpacity 
+            style={styles.resetButton} 
+            onPress={clearFormCompletely}
+          >
+            <Ionicons name="refresh" size={24} color="#fff" />
+          </TouchableOpacity>
         </View>
       )}
 
@@ -311,6 +332,11 @@ const AddBudget = () => {
                 <TouchableOpacity onPress={() => setDatePickerVisibility(true)}>
                   <Text style={styles.dateText}>{formatDate(date)}</Text>
                 </TouchableOpacity>
+                {isFutureDate(date) && (
+                  <Text style={styles.futureDateNote}>
+                    Future date detected - transaction will be automatically scheduled
+                  </Text>
+                )}
                 {isDatePickerVisible && (
                   <DateTimePicker
                     value={date}
@@ -318,16 +344,25 @@ const AddBudget = () => {
                     display="default"
                     onChange={(_, selectedDate) => {
                       setDatePickerVisibility(false);
-                      if (selectedDate) setDate(selectedDate);
+                      if (selectedDate) handleDateChange(selectedDate);
                     }}
+                    
                   />
+                
                 )}
               </View>
 
               {/* Scheduled */}
               <View style={styles.inputGroup}>
                 <View style={styles.switchContainer}>
-                  <Text style={styles.label}>SCHEDULED</Text>
+                  <View>
+                    <Text style={styles.label}>SCHEDULED</Text>
+                    {isFutureDate(date) && (
+                      <Text style={styles.scheduledNote}>
+                        Auto-enabled for future dates
+                      </Text>
+                    )}
+                  </View>
                   <Switch
                     value={isScheduled}
                     onValueChange={setIsScheduled}
@@ -356,13 +391,18 @@ const AddBudget = () => {
                   styles.addButton,
                   (!title || !amount || isSubmitting) && styles.disabledButton
                 ]} 
-                onPress={handleAddTransaction}
+                onPress={() => {
+                  handleSubmit();
+                  clearFormCompletely();
+                }}
                 disabled={!title || !amount || isSubmitting}
               >
                 {isSubmitting ? (
                   <ActivityIndicator color="#fff" size="small" />
                 ) : (
-                  <Text style={styles.addButtonText}>Add Transaction</Text>
+                  <Text style={styles.addButtonText}>
+                    {isScheduled ? 'Schedule Transaction' : 'Add Transaction'}
+                  </Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -511,6 +551,9 @@ const styles = StyleSheet.create({
   backButton: {
     padding: 8,
   },
+  resetButton: {
+    padding: 8,
+  },
   headerText: {
     color: '#fff',
     fontSize: 24,
@@ -593,6 +636,31 @@ const styles = StyleSheet.create({
     fontSize: 16,
     paddingVertical: 8,
   },
+  futureDateNote: {
+    fontSize: 12,
+    color: '#4D9F8D',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  scheduledNote: {
+    fontSize: 12,
+    color: '#4D9F8D',
+    marginTop: 2,
+  },
+  reminderInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0f9f7',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 15,
+  },
+  reminderText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#4D9F8D',
+    flex: 1,
+  },
   categorySelector: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -643,6 +711,20 @@ const styles = StyleSheet.create({
   addButtonText: {
     color: '#fff',
     fontSize: 18,
+    fontWeight: 'bold',
+  },
+  clearButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#4D9F8D',
+    borderRadius: 25,
+    padding: 15,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  clearButtonText: {
+    color: '#4D9F8D',
+    fontSize: 16,
     fontWeight: 'bold',
   },
   modalOverlay: {

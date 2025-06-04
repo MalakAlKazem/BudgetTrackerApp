@@ -12,7 +12,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Category, useTransactions } from '@/app/context/TransactionContext';
+import { Category, useTransactions } from '../context/TransactionContext';
 import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');

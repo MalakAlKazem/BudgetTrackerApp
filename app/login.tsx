@@ -1,93 +1,50 @@
 import React from 'react';
-import {
-  View,
-  StyleSheet,
-  Dimensions,
-} from 'react-native';
-import {
-  TextInput,
-  Button,
-  Text,
-} from 'react-native-paper';
+import { View, StyleSheet, Dimensions } from 'react-native';
+import { TextInput, Button, Text } from 'react-native-paper';
 import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
-import {
-  createUserWithEmailAndPassword,
-  updateProfile,
-} from 'firebase/auth';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../config/firebaseConfig';
-import { useRouter } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import * as yup from 'yup';
 
 const { height } = Dimensions.get('window');
 
-type RegisterFormData = {
-  name: string;
+type LoginFormData = {
   email: string;
   password: string;
-  confirmPassword: string;
 };
 
 const schema = yup.object().shape({
-  name: yup.string().required('Full name is required'),
   email: yup.string().email().required('Email is required'),
   password: yup.string().min(6).required('Password is required'),
-  confirmPassword: yup
-    .string()
-    .oneOf([yup.ref('password')], 'Passwords must match')
-    .required('Confirm password is required'),
 });
 
-const RegisterScreen = () => {
+const LoginScreen = () => {
   const {
     control,
     handleSubmit,
     formState: { errors },
-  } = useForm<RegisterFormData>({
+  } = useForm<LoginFormData>({
     resolver: yupResolver(schema),
   });
 
   const router = useRouter();
 
-  const onSubmit = async (data: RegisterFormData) => {
+  const onSubmit = async (data: LoginFormData) => {
     try {
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        data.email,
-        data.password
-      );
-      await updateProfile(userCredential.user, {
-        displayName: data.name,
-      });
-      console.log('User registered:', userCredential.user);
+      const userCredential = await signInWithEmailAndPassword(auth, data.email, data.password);
+      console.log('Logged in:', userCredential.user);
       router.replace('/(tabs)');
     } catch (error: any) {
-      console.error('Registration error:', error.message);
+      console.error('Login failed:', error.message);
     }
   };
 
   return (
     <View style={styles.container}>
       <View style={styles.formContainer}>
-        <Text style={styles.title}>Register</Text>
-
-        <Controller
-          control={control}
-          name="name"
-          render={({ field: { onChange, value } }) => (
-            <TextInput
-              label="Full Name"
-              mode="outlined"
-              value={value}
-              onChangeText={onChange}
-              error={!!errors.name}
-              style={styles.input}
-            />
-          )}
-        />
-        {errors.name && (
-          <Text style={styles.error}>{errors.name.message}</Text>
-        )}
+        <Text style={styles.title}>Login</Text>
 
         <Controller
           control={control}
@@ -105,9 +62,7 @@ const RegisterScreen = () => {
             />
           )}
         />
-        {errors.email && (
-          <Text style={styles.error}>{errors.email.message}</Text>
-        )}
+        {errors.email && <Text style={styles.error}>{errors.email.message}</Text>}
 
         <Controller
           control={control}
@@ -124,36 +79,22 @@ const RegisterScreen = () => {
             />
           )}
         />
-        {errors.password && (
-          <Text style={styles.error}>{errors.password.message}</Text>
-        )}
-
-        <Controller
-          control={control}
-          name="confirmPassword"
-          render={({ field: { onChange, value } }) => (
-            <TextInput
-              label="Confirm Password"
-              mode="outlined"
-              secureTextEntry
-              value={value}
-              onChangeText={onChange}
-              error={!!errors.confirmPassword}
-              style={styles.input}
-            />
-          )}
-        />
-        {errors.confirmPassword && (
-          <Text style={styles.error}>{errors.confirmPassword.message}</Text>
-        )}
+        {errors.password && <Text style={styles.error}>{errors.password.message}</Text>}
 
         <Button
           mode="contained"
           onPress={handleSubmit(onSubmit)}
           style={styles.button}
         >
-          Register
+          Login
         </Button>
+
+        <Text style={styles.linkText}>
+          Don't have an account?{' '}
+          <Link href="/register" style={styles.link}>
+            Register here
+          </Link>
+        </Text>
       </View>
     </View>
   );
@@ -164,7 +105,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F5F5F5',
     paddingHorizontal: 20,
-    paddingTop: height * 0.1,
+    paddingTop: height * 0.15,
   },
   formContainer: {
     backgroundColor: '#FFFFFF',
@@ -198,6 +139,15 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     fontSize: 12,
   },
+  linkText: {
+    marginTop: 20,
+    textAlign: 'center',
+    fontSize: 14,
+  },
+  link: {
+    color: '#388984',
+    fontWeight: 'bold',
+  },
 });
 
-export default RegisterScreen;
+export default LoginScreen; 

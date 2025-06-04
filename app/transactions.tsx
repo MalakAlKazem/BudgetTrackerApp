@@ -11,13 +11,13 @@ import {
   StatusBar,
   ActivityIndicator,
 } from 'react-native';
-import { useTransactions } from '@/app/context/TransactionContext';
+import { useTransactions} from '../context/TransactionContext';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
 
 const TransactionsScreen: React.FC = () => {
-  const { transactions, isLoading, refreshTransactions } = useTransactions();
+  const { transactions, categories, isLoading, refreshTransactions, markTransactionAsPaid, deleteTransaction } = useTransactions();
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'income' | 'expense' | 'pending'>('all');
@@ -29,13 +29,26 @@ const TransactionsScreen: React.FC = () => {
     }
   }, []);
 
+  // Helper function to get category info
+  const getCategoryInfo = (categoryId: string) => {
+    return categories.find(cat => cat.id === categoryId);
+  };
+
   // Filtering and sorting transactions
   const filteredTransactions = transactions
     .filter(t => {
-      if (filter === 'all') return true;
-      // Since we removed isPaid, pending filter cannot work properly; interpret pending as all expenses for now
-      if (filter === 'pending') return t.type === 'expense';
-      return t.type === filter;
+      switch (filter) {
+        case 'all':
+          return true;
+        case 'income':
+          return t.type === 'income';
+        case 'expense':
+          return t.type === 'expense';
+        case 'pending':
+          return !t.isPaid; // Show unpaid transactions
+        default:
+          return true;
+      }
     })
     .sort((a, b) => {
       if (sortBy === 'date') {
@@ -54,12 +67,23 @@ const TransactionsScreen: React.FC = () => {
   };
 
   const getIconForTransaction = (transaction: any) => {
-    const name = transaction.title?.toLowerCase() || '';
+    // First check if there's a category with an icon
+    if (transaction.category) {
+      const categoryInfo = getCategoryInfo(transaction.category);
+      if (categoryInfo) {
+        return categoryInfo.icon;
+      }
+    }
+
+
+    // Fallback to name-based icons
+    const name = transaction.name?.toLowerCase() || '';
     if (name.includes('upwork')) return require('@/assets/upwork.png');
     if (name.includes('paypal')) return require('@/assets/paypal.png');
     if (name.includes('youtube')) return require('@/assets/youtube.png');
     if (name.includes('transfer')) return require('@/assets/transfer.png');
-    // fallback icon based on type
+    
+    // Default fallback
     return transaction.type === 'income'
       ? require('@/assets/transfer.png')
       : require('@/assets/profile-avatar.png');
@@ -75,8 +99,43 @@ const TransactionsScreen: React.FC = () => {
   };
 
   const getPendingCount = () => {
-    // Without isPaid, pending count means all expenses for now
-    return transactions.filter(t => t.type === 'expense').length;
+    return transactions.filter(t => !t.isPaid).length;
+  };
+
+  const handleMarkAsPaid = async (transactionId: string) => {
+    try {
+      await markTransactionAsPaid(transactionId);
+    } catch (error) {
+      console.error('Error marking transaction as paid:', error);
+    }
+  };
+  const handleDeleteTransaction = async (id: string) => {
+  try {
+    await deleteTransaction(id);
+  } catch (e) {
+    console.error("Failed to delete:", e);
+  }
+};
+
+  const renderTransactionIcon = (transaction: any) => {
+    const iconSource = getIconForTransaction(transaction);
+    
+    // If it's a FontAwesome icon name (string), render FontAwesome5 component
+    if (typeof iconSource === 'string') {
+      return (
+        <View style={styles.iconContainer}>
+          <FontAwesome5 name={iconSource} size={20} color="#4D9F8D" />
+        </View>
+      );
+    }
+    
+    // Otherwise render as Image
+    return (
+      <Image 
+        source={iconSource} 
+        style={styles.transactionIcon} 
+      />
+    );
   };
 
   return (
@@ -164,10 +223,18 @@ const TransactionsScreen: React.FC = () => {
             </View>
           ) : filteredTransactions.length === 0 ? (
             <View style={styles.emptyContainer}>
+              <Ionicons name="receipt-outline" size={64} color="#ccc" />
               <Text style={styles.emptyText}>
                 {filter === 'pending' 
                   ? "No pending transactions" 
+                  : filter === 'income'
+                  ? "No income transactions"
+                  : filter === 'expense'
+                  ? "No expense transactions"
                   : "No transactions found"}
+              </Text>
+              <Text style={styles.emptySubText}>
+                Add your first transaction to get started
               </Text>
             </View>
           ) : (
@@ -175,29 +242,54 @@ const TransactionsScreen: React.FC = () => {
               data={filteredTransactions}
               keyExtractor={(item) => item.id.toString()}
               scrollEnabled={false}
-              renderItem={({ item }) => (
-                <View style={styles.transactionItem}>
-                  <Image 
-                    source={getIconForTransaction(item)} 
-                    style={styles.transactionIcon} 
-                  />
-                  <View style={styles.transactionInfo}>
-                    <Text style={styles.transactionName}>{item.name}</Text>
-                    <Text style={styles.transactionDate}>{formatDate(item.date)}</Text>
-                    {item.category && (
-                      <Text style={styles.transactionCategory}>{item.category}</Text>
-                    )}
+              renderItem={({ item }) => {
+                const categoryInfo = getCategoryInfo(item.category || '');
+                
+                return (
+                  <View style={[
+                    styles.transactionItem,
+                    !item.isPaid && styles.pendingTransaction
+                  ]}>
+                    {renderTransactionIcon(item)}
+                    
+                    <View style={styles.transactionInfo}>
+                      <Text style={styles.transactionName}>{item.name}</Text>
+                      <Text style={styles.transactionDate}>{formatDate(item.date)}</Text>
+                     
+                      {categoryInfo && (
+                        <Text style={styles.transactionCategory}>{categoryInfo.name}</Text>
+                      )}
+                      {!item.isPaid && (
+                        <Text style={styles.pendingLabel}>Pending</Text>
+                      )}
+                    </View>
+                    
+                    <View style={styles.transactionRight}>
+                      <Text 
+                        style={[
+                          styles.transactionAmount, 
+                          item.type === 'income' ? styles.income : styles.expense
+                        ]}
+                      >
+                        {item.type === 'income' ? '+' : '-'}${item.amount.toFixed(2)}
+                      </Text>
+                      
+                      {!item.isPaid && (
+                        <TouchableOpacity 
+                          style={styles.markPaidButton}
+                          onPress={() => handleMarkAsPaid(item.id)}
+                        >
+                          <Text style={styles.markPaidButtonText}>Mark Paid</Text>
+                        </TouchableOpacity>
+                      )}
+                       {/* TRASH ICON BELOW PRICE */}
+           <TouchableOpacity onPress={() => handleDeleteTransaction(item.id)}>
+  <Ionicons name="trash-bin" size={20} color="#B00020" />
+</TouchableOpacity>
+                    </View>
                   </View>
-                  <Text 
-                    style={[
-                      styles.transactionAmount, 
-                      item.type === 'income' ? styles.income : styles.expense
-                    ]}
-                  >
-                    {item.type === 'income' ? '+' : '-'}${item.amount.toFixed(2)}
-                  </Text>
-                </View>
-              )}
+                );
+              }}
             />
           )}
         </ScrollView>
@@ -311,6 +403,20 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
+  pendingTransaction: {
+    backgroundColor: '#FFF9E6',
+    borderLeftWidth: 4,
+    borderLeftColor: '#FFA500',
+  },
+  iconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F0F9F7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
   transactionIcon: {
     width: 40,
     height: 40,
@@ -339,11 +445,21 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 4,
     alignSelf: 'flex-start',
+    marginBottom: 2,
+  },
+  pendingLabel: {
+    fontSize: 11,
+    color: '#FFA500',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  transactionRight: {
+    alignItems: 'flex-end',
   },
   transactionAmount: {
     fontSize: 16,
     fontWeight: '600',
-    marginHorizontal: 8,
+    marginBottom: 4,
   },
   income: {
     color: '#4CAF50',
@@ -351,22 +467,40 @@ const styles = StyleSheet.create({
   expense: {
     color: '#F44336',
   },
+  markPaidButton: {
+    backgroundColor: '#4D9F8D',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  markPaidButtonText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: '500',
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingTop: 100,
   },
   emptyContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 40,
+    paddingVertical: 60,
   },
   emptyText: {
     color: '#888',
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: '500',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptySubText: {
+    color: '#aaa',
+    fontSize: 14,
   },
 });
 
 export default TransactionsScreen;
-

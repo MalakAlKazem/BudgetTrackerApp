@@ -1,6 +1,7 @@
+import React from 'react';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
@@ -9,8 +10,9 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { TransactionProvider } from '@/app/context/TransactionContext';
-import { initDatabase } from './utils/database';
+import { TransactionProvider } from '../context/TransactionContext';
+import { initDatabase } from '../utils/database';
+import { AuthProvider, useAuth } from '../context/AuthContext';
 
 const AppIntroSlider: any = require('react-native-app-intro-slider').default;
 
@@ -56,6 +58,38 @@ const slides = [
     image: require('@/assets/images/slides/slide6.png'),
   },
 ];
+
+function RootLayoutNav() {
+  const { isAuthenticated } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+  const colorScheme = useColorScheme();
+
+  useEffect(() => {
+    const inAuthGroup = segments[0] === '(tabs)' || segments[0] === 'settings_tabs';
+
+    if (!isAuthenticated && inAuthGroup) {
+      // Redirect to the login page if not authenticated and trying to access protected routes
+      router.replace('/');
+    } else if (isAuthenticated && !inAuthGroup) {
+      // Redirect to the home page if authenticated and trying to access auth pages
+      router.replace('/(tabs)');
+    }
+  }, [isAuthenticated, segments]);
+
+  return (
+    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <Stack>
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="settings_tabs" options={{ headerShown: false }} />
+        <Stack.Screen name="register" options={{ title: 'Register' }} />
+        <Stack.Screen name="+not-found" />
+      </Stack>
+      <StatusBar style="auto" />
+    </ThemeProvider>
+  );
+}
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -136,19 +170,11 @@ export default function RootLayout() {
   }
 
   return (
-    <TransactionProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack>
-          <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="settings_tabs" options={{ headerShown: false }} />
-          <Stack.Screen name="register" options={{ title: 'Register' }} />
-          <Stack.Screen name="ProfileScreen" options={{ headerShown: false }} />
-          <Stack.Screen name="+not-found" />
-        </Stack>
-        <StatusBar style="auto" />
-      </ThemeProvider>
-    </TransactionProvider>
+    <AuthProvider>
+      <TransactionProvider>
+        <RootLayoutNav />
+      </TransactionProvider>
+    </AuthProvider>
   );
 }
 

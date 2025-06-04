@@ -18,8 +18,8 @@ import { getAuth } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { getFirestore } from 'firebase/firestore';
 import { initializeApp } from 'firebase/app';
-import { firebaseConfig } from '../config/firebaseConfig';
-import { useTransactions, Transaction } from '../context/TransactionContext';
+import { firebaseConfig } from '../../config/firebaseConfig';
+import { useTransactions, Transaction } from '../../context/TransactionContext';
 
 const { width, height } = Dimensions.get('window');
 
