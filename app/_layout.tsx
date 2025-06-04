@@ -68,13 +68,14 @@ function RootLayoutNav() {
   useEffect(() => {
     const inAuthGroup = segments[0] === '(tabs)' || segments[0] === 'settings_tabs';
     const isTransactionsRoute = segments[0] === 'transactions';
+    const isCategoriesRoute = segments[0] === 'categories'; // Add this line
 
-    if (!isAuthenticated && (inAuthGroup || isTransactionsRoute)) {
-      router.replace('/');
-    } else if (isAuthenticated && (!inAuthGroup && !isTransactionsRoute)) {
-      router.replace('/(tabs)');
-    }
-  }, [isAuthenticated, segments]);
+    if (!isAuthenticated && (inAuthGroup || isTransactionsRoute || isCategoriesRoute)) {
+    router.replace('/');
+  } else if (isAuthenticated && (!inAuthGroup && !isTransactionsRoute && !isCategoriesRoute)) {
+    router.replace('/(tabs)');
+  }
+}, [isAuthenticated, segments]);
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
@@ -84,6 +85,7 @@ function RootLayoutNav() {
         <Stack.Screen name="settings_tabs" options={{ headerShown: false }} />
         <Stack.Screen name="register" options={{ title: 'Register' }} />
         <Stack.Screen name="transactions" options={{ title: 'All Transactions', headerShown: false }} />
+        <Stack.Screen name="categories" options={{ title: 'All Categories', headerShown: false }} />
         <Stack.Screen name="+not-found" />
       </Stack>
       <StatusBar style="auto" />
