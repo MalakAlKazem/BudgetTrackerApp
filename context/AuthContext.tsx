@@ -9,6 +9,8 @@ import {
 } from 'firebase/auth';
 import { auth } from '../config/firebaseConfig';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Alert } from 'react-native';
+import { initDatabase } from '../utils/database';
 
 interface AuthContextType {
   user: User | null;
@@ -28,59 +30,61 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-  const checkAuthState = async () => {
-    try {
-      const savedUser = await AsyncStorage.getItem('user');
-      if (savedUser) {
-        console.log('Previous user session found - waiting for Firebase verification...');
-        // Don't set any state here, let Firebase handle it
+    const checkAuthState = async () => {
+      try {
+        const savedUser = await AsyncStorage.getItem('user');
+        if (savedUser) {
+          // console.log('Previous user session found - waiting for Firebase verification...');
+          // Do nothing, just wait for onAuthStateChanged
+        }
+      } catch (error) {
+        console.error('Error checking auth state:', error);
       }
-    } catch (error) {
-      console.error('Error checking auth state:', error);
-    }
-  };
+    };
 
-  checkAuthState();
+    checkAuthState();
 
-  const unsubscribe = onAuthStateChanged(auth, async (user) => {
-    if (user) {
-      console.log('Auth state changed: User logged in -', user.email);
-      setUser(user);
-      setIsAuthenticated(true);
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        setUser(user);
+        setIsAuthenticated(true);
+        
+        await AsyncStorage.setItem('user', JSON.stringify({
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+        }));
+        await initDatabase();
+      } else {
+        setUser(null);
+        setIsAuthenticated(false);
+        await AsyncStorage.removeItem('user');
+      }
       
-      await AsyncStorage.setItem('user', JSON.stringify({
-        uid: user.uid,
-        email: user.email,
-        displayName: user.displayName,
-      }));
-    } else {
-      console.log('Auth state changed: User logged out');
-      setUser(null);
-      setIsAuthenticated(false);
-      await AsyncStorage.removeItem('user');
-    }
-    
-    setIsLoading(false);
-  });
+      setIsLoading(false);
+    });
 
-  return () => unsubscribe();
-}, []);
+    return () => unsubscribe();
+  }, []);
+
   const signIn = async (email: string, password: string): Promise<void> => {
+    setIsLoading(true);
     try {
-      setIsLoading(true);
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      console.log('User signed in successfully:', userCredential.user.email);
+      // console.log('User signed in successfully:', userCredential.user.email);
+      // Initialize database for the newly signed-in user
+      await initDatabase();
     } catch (error: any) {
-      console.error('Sign in error:', error.message);
-      throw new Error(error.message);
+      Alert.alert("Sign In Error", error.message);
+      console.error("Sign In Error:", error);
     } finally {
       setIsLoading(false);
     }
   };
 
   const signUp = async (email: string, password: string, displayName?: string): Promise<void> => {
+    setIsLoading(true);
     try {
-      setIsLoading(true);
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       
       // Update display name if provided
@@ -90,37 +94,45 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
       }
       
-      console.log('User signed up successfully:', userCredential.user.email);
+      // console.log('User signed up successfully:', userCredential.user.email);
+      // Initialize database for the newly signed-up user
+      await initDatabase();
     } catch (error: any) {
-      console.error('Sign up error:', error.message);
-      throw new Error(error.message);
+      Alert.alert("Sign Up Error", error.message);
+      console.error("Sign Up Error:", error);
     } finally {
       setIsLoading(false);
     }
   };
 
   const logout = async (): Promise<void> => {
+    setIsLoading(true);
     try {
-      setIsLoading(true);
       await signOut(auth);
-      console.log('User signed out successfully');
+      // console.log('User signed out successfully');
+      // Clear user-specific local data if necessary
     } catch (error: any) {
-      console.error('Sign out error:', error.message);
-      throw new Error(error.message);
+      Alert.alert("Sign Out Error", error.message);
+      console.error("Sign Out Error:", error);
     } finally {
       setIsLoading(false);
     }
   };
 
   const updateUserProfile = async (displayName: string): Promise<void> => {
-    try {
-      if (user) {
-        await updateProfile(user, { displayName });
-        console.log('Profile updated successfully');
+    const currentUser = auth.currentUser;
+    if (currentUser) {
+      try {
+        await updateProfile(currentUser, { displayName });
+        // console.log('Profile updated successfully');
+        // Optionally update local user state
+        setUser({ ...currentUser, displayName } as User);
+      } catch (error: any) {
+        Alert.alert("Profile Update Error", error.message);
+        console.error("Profile Update Error:", error);
       }
-    } catch (error: any) {
-      console.error('Profile update error:', error.message);
-      throw new Error(error.message);
+    } else {
+      Alert.alert("Profile Update Error", "No user logged in");
     }
   };
 

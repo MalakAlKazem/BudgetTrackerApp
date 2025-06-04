@@ -10,6 +10,7 @@ import {
   RefreshControl,
   StatusBar,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useTransactions} from '../context/TransactionContext';
 import { useRouter } from 'expo-router';
@@ -110,12 +111,37 @@ const TransactionsScreen: React.FC = () => {
     }
   };
   const handleDeleteTransaction = async (id: string) => {
-  try {
-    await deleteTransaction(id);
-  } catch (e) {
-    console.error("Failed to delete:", e);
-  }
-};
+    try {
+      // Show confirmation alert before deleting
+      Alert.alert(
+        "Confirm Deletion", // Alert Title
+        "Are you sure you want to delete this transaction?", // Alert Message
+        [
+          { // Cancel button
+            text: "Cancel",
+            style: "cancel",
+            onPress: () => console.log("Delete cancelled") // Optional: Log cancellation
+          },
+          { // Delete button
+            text: "Delete",
+            style: "destructive", // Red color for delete action
+            onPress: async () => {
+              try {
+                await deleteTransaction(id);
+              } catch (e) {
+                console.error("Failed to delete:", e);
+                // Optionally show an error message to the user
+                Alert.alert("Deletion Failed", "Could not delete the transaction.");
+              }
+            }
+          }
+        ],
+        { cancelable: false } // Prevents dismissal by tapping outside
+      );
+    } catch (e) {
+      console.error("Error showing delete confirmation:", e);
+    }
+  };
 
   const renderTransactionIcon = (transaction: any) => {
     const iconSource = getIconForTransaction(transaction);
@@ -138,9 +164,17 @@ const TransactionsScreen: React.FC = () => {
     );
   };
 
+  // Add handleEditTransaction function
+  const handleEditTransaction = (transactionId: string) => {
+    // Navigate to the AddBudget screen with the transaction ID
+    router.push({
+      pathname: '/AddBudget',
+      params: { transactionId: transactionId },
+    });
+  };
+
   return (
     <>
-      <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.container}>
         <StatusBar barStyle="dark-content" backgroundColor="#F5F5F5" />
         <View style={styles.header}>
@@ -282,10 +316,19 @@ const TransactionsScreen: React.FC = () => {
                           <Text style={styles.markPaidButtonText}>Mark Paid</Text>
                         </TouchableOpacity>
                       )}
-                       {/* TRASH ICON BELOW PRICE */}
-           <TouchableOpacity onPress={() => handleDeleteTransaction(item.id)}>
-  <Ionicons name="trash-bin" size={20} color="#B00020" />
-</TouchableOpacity>
+                      
+                      {/* Edit ICON BELOW PRICE */}
+                      <TouchableOpacity 
+                        style={styles.editButton}
+                        onPress={() => handleEditTransaction(item.id)}
+                      >
+                        <Ionicons name="create" size={20} color="#4D9F8D" />
+                      </TouchableOpacity>
+                      
+                      {/* TRASH ICON BELOW PRICE */}
+                      <TouchableOpacity onPress={() => handleDeleteTransaction(item.id)}>
+                        <Ionicons name="trash-bin" size={20} color="#B00020" />
+                      </TouchableOpacity>
                     </View>
                   </View>
                 );
@@ -455,11 +498,13 @@ const styles = StyleSheet.create({
   },
   transactionRight: {
     alignItems: 'flex-end',
+    flexDirection: 'row', // Arrange items horizontally
   },
   transactionAmount: {
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 4,
+    marginRight: 10, // Add some space between amount and buttons
   },
   income: {
     color: '#4CAF50',
@@ -472,11 +517,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
+    marginRight: 6, // Space between Mark Paid and Edit/Delete
   },
   markPaidButtonText: {
     color: '#FFF',
     fontSize: 11,
     fontWeight: '500',
+  },
+  editButton: {
+    padding: 4,
+    borderRadius: 20,
+    marginLeft: 6,
   },
   loadingContainer: {
     flex: 1,

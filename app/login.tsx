@@ -34,7 +34,7 @@ const LoginScreen = () => {
   const onSubmit = async (data: LoginFormData) => {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, data.email, data.password);
-      console.log('Logged in:', userCredential.user);
+      // console.log('Logged in:', userCredential.user);
       router.replace('/(tabs)');
     } catch (error: any) {
       console.error('Login failed:', error.message);

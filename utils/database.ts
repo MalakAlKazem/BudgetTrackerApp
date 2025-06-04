@@ -62,7 +62,6 @@ const checkFirestoreConnection = async (retries: number = 3): Promise<boolean> =
     try {
       const user = auth.currentUser;
       if (!user) {
-        console.log('No authenticated user found');
         return false;
       }
 
@@ -547,7 +546,7 @@ export const deleteTransactionFromSQLite = async (id: number) => {
   return sqliteDb.runAsync("DELETE FROM transactions WHERE id = ?", [id]);
 };
 
-// 2. “Delete” in Firestore (either soft‐delete or hard‐delete)
+// 2. "Delete" in Firestore (either soft-delete or hard-delete)
 export const deleteTransactionFromFirestore = async (id: number) => {
   const user = auth.currentUser;
   if (!user) throw new Error("Not authenticated");
@@ -756,4 +755,43 @@ export const setupTransactionListeners = (onUpdate: (transactions: Transaction[]
   });
   
   return unsubscribe;
+};
+
+export const updateTransaction = async (
+  id: number,
+  title: string,
+  amount: number,
+  date: string,
+  type: string,
+  category: string,
+  isScheduled: boolean,
+  invoice: string | null
+) => {
+  try {
+    // Update in SQLite
+    await sqliteDb.runAsync(
+      `UPDATE transactions 
+       SET title = ?, amount = ?, date = ?, type = ?, category = ?, isScheduled = ?, invoice = ?
+       WHERE id = ?`,
+      [title, amount, date, type, category, isScheduled ? 1 : 0, invoice, id]
+    );
+
+    // Get the updated transaction
+    const updatedTransaction = await sqliteDb.getFirstAsync<Transaction>(
+      'SELECT * FROM transactions WHERE id = ?',
+      [id]
+    );
+
+    if (!updatedTransaction) {
+      throw new Error('Failed to fetch updated transaction');
+    }
+
+    // Sync to Firestore
+    await syncToFirestore(updatedTransaction);
+
+    return updatedTransaction;
+  } catch (error) {
+    console.error('Error updating transaction:', error);
+    throw error;
+  }
 };

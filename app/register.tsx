@@ -59,8 +59,7 @@ const RegisterScreen = () => {
       await updateProfile(userCredential.user, {
         displayName: data.name,
       });
-      console.log('User registered:', userCredential.user);
-      router.replace('/(tabs)');
+      router.replace('/login');
     } catch (error: any) {
       console.error('Registration error:', error.message);
     }

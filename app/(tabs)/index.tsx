@@ -11,8 +11,9 @@ import {
   ListRenderItem,
   ActivityIndicator,
   RefreshControl,
+  Animated,
 } from 'react-native';
-import { FontAwesome5 } from '@expo/vector-icons';
+import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { getAuth } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
@@ -31,6 +32,7 @@ const auth = getAuth(app);
 interface CategoryItemProps {
   title: string;
   icon: string;
+  onPress?: () => void;
 }
 
 interface FormattedTransaction {
@@ -42,11 +44,13 @@ interface FormattedTransaction {
   color: string;
 }
 
-const CategoryItem: React.FC<CategoryItemProps> = ({ title, icon }) => (
-  <View style={styles.categoryItem}>
-    <FontAwesome5 name={icon} size={20} color="#343A40" />
+const CategoryItem: React.FC<CategoryItemProps> = ({ title, icon, onPress }) => (
+  <TouchableOpacity style={styles.categoryItem} onPress={onPress}>
+    <View style={styles.categoryIconContainer}>
+      <FontAwesome5 name={icon} size={20} color="#4D9F8D" />
+    </View>
     <Text style={styles.categoryText}>{title}</Text>
-  </View>
+  </TouchableOpacity>
 );
 
 const HomeScreen: React.FC = () => {
@@ -54,6 +58,7 @@ const HomeScreen: React.FC = () => {
   const [userName, setUserName] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState<boolean>(true);
   const [refreshing, setRefreshing] = React.useState<boolean>(false);
+  const fadeAnim = React.useRef(new Animated.Value(0)).current;
   
   const { 
     transactions, 
@@ -65,11 +70,11 @@ const HomeScreen: React.FC = () => {
   } = useTransactions();
 
   useEffect(() => {
-    const currentUser  = auth.currentUser ;
-    const uid = currentUser ?.uid;
+    const currentUser = auth.currentUser;
+    const uid = currentUser?.uid;
     
     if (!uid) {
-      console.error('User  not authenticated yet');
+      console.error('User not authenticated yet');
       setLoading(false);
       return;
     }
@@ -81,29 +86,37 @@ const HomeScreen: React.FC = () => {
           const userData = docSnapshot.data();
           const name = userData?.displayName || 
                        userData?.fullName || 
-                       currentUser ?.displayName || 
-                       currentUser ?.email?.split('@')[0] || 
-                       'User ';
+                       currentUser?.displayName || 
+                       currentUser?.email?.split('@')[0] || 
+                       'User';
           setUserName(name);
         } else {
-          const name = currentUser ?.displayName || 
-                       currentUser ?.email?.split('@')[0] || 
-                       'User ';
+          const name = currentUser?.displayName || 
+                       currentUser?.email?.split('@')[0] || 
+                       'User';
           setUserName(name);
         }
         setLoading(false);
       },
       (error) => {
         console.error('Firestore listener error:', error);
-        const name = currentUser ?.displayName || 
-                     currentUser ?.email?.split('@')[0] || 
-                     'User ';
+        const name = currentUser?.displayName || 
+                     currentUser?.email?.split('@')[0] || 
+                     'User';
         setUserName(name);
         setLoading(false);
       }
     );
   
     return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 500,
+      useNativeDriver: true,
+    }).start();
   }, []);
 
   const handleRefresh = async () => {
@@ -118,20 +131,22 @@ const HomeScreen: React.FC = () => {
     .slice(0, 4)
     .map((t) => ({
       id: t.id,
-      name: t.name || 'Unnamed Transaction', // Fallback for undefined name
-      amount: `${t.type === 'income' ? '+ ' : '- '}$${t.amount?.toFixed(2) || '0.00'}`, // Fallback for undefined amount
+      name: t.name || 'Unnamed Transaction',
+      amount: `${t.type === 'income' ? '+ ' : '- '}$${t.amount?.toFixed(2) || '0.00'}`,
       date: formatDate(t.date),
       icon: getIconForTransaction(t),
       color: t.type === 'income' ? '#4CAF50' : '#F44336',
     }));
 
   const renderItem: ListRenderItem<FormattedTransaction> = ({ item }) => (
-    <View style={styles.transactionItem}>
-      <Image 
-        source={item.icon} 
-        style={styles.transactionIcon} 
-        defaultSource={require('@/assets/profile-avatar.png')}
-      />
+    <TouchableOpacity style={styles.transactionItem}>
+      <View style={styles.transactionIconContainer}>
+        <Image 
+          source={item.icon} 
+          style={styles.transactionIcon} 
+          defaultSource={require('@/assets/profile-avatar.png')}
+        />
+      </View>
       <View style={styles.transactionDetails}>
         <Text style={styles.transactionName} numberOfLines={1} ellipsizeMode="tail">
           {item.name}
@@ -139,13 +154,13 @@ const HomeScreen: React.FC = () => {
         <Text style={styles.transactionDate}>{item.date}</Text>
       </View>
       <Text style={[styles.transactionAmount, { color: item.color }]}>{item.amount}</Text>
-    </View>
+    </TouchableOpacity>
   );
 
   if (loading || transactionsLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4CAF50" />
+        <ActivityIndicator size="large" color="#4D9F8D" />
       </View>
     );
   }
@@ -168,42 +183,56 @@ const HomeScreen: React.FC = () => {
           />
         </View>
 
-        <View style={styles.greetingContainer}>
-          <Text style={styles.greetingText}>Hello,</Text>
-          <Text style={styles.userName}>
-            {userName}
-          </Text>
-        </View>
+        <Animated.View style={[styles.greetingContainer, { opacity: fadeAnim }]}>
+          <Text style={styles.greetingText}>Welcome back,</Text>
+          <Text style={styles.userName}>{userName}</Text>
+        </Animated.View>
 
-        <View style={styles.balanceContainer}>
-          <Text style={styles.sectionTitle}>Total Balance</Text>
+        <Animated.View style={[styles.balanceContainer, { opacity: fadeAnim }]}>
+          <View style={styles.balanceHeader}>
+            <Text style={styles.sectionTitle}>Total Balance</Text>
+            <TouchableOpacity style={styles.refreshButton}>
+              <Ionicons name="refresh" size={20} color="#4D9F8D" />
+            </TouchableOpacity>
+          </View>
           <Text style={styles.balanceAmount}>
             ${balance.toFixed(2)}
           </Text>
           <View style={styles.incomeExpenseRow}>
             <View style={styles.financeBox}>
-              <Text style={styles.financeLabel}>Income</Text>
-              <Text style={[styles.financeAmount, styles.incomeText]}>
-                ${totalIncome.toFixed(2)}
-              </Text>
+              <View style={styles.financeIconContainer}>
+                <FontAwesome5 name="arrow-down" size={16} color="#4CAF50" />
+              </View>
+              <View>
+                <Text style={styles.financeLabel}>Income</Text>
+                <Text style={[styles.financeAmount, styles.incomeText]}>
+                  ${totalIncome.toFixed(2)}
+                </Text>
+              </View>
             </View>
             <View style={styles.financeBox}>
-              <Text style={styles.financeLabel}>Expenses</Text>
-              <Text style={[styles.financeAmount, styles.expenseText]}>
-                ${totalExpenses.toFixed(2)}
-              </Text>
+              <View style={[styles.financeIconContainer, { backgroundColor: '#FFF5F5' }]}>
+                <FontAwesome5 name="arrow-up" size={16} color="#F44336" />
+              </View>
+              <View>
+                <Text style={styles.financeLabel}>Expenses</Text>
+                <Text style={[styles.financeAmount, styles.expenseText]}>
+                  ${totalExpenses.toFixed(2)}
+                </Text>
+              </View>
             </View>
           </View>
-        </View>
+        </Animated.View>
 
-        <View style={styles.sectionContainer}>
+        <Animated.View style={[styles.sectionContainer, { opacity: fadeAnim }]}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Recent Transactions</Text>
             <TouchableOpacity 
               onPress={() => router.push('/transactions')}
-              accessibilityLabel="View all transactions"
+              style={styles.seeAllButton}
             >
               <Text style={styles.seeAllText}>See all</Text>
+              <Ionicons name="chevron-forward" size={16} color="#4D9F8D" />
             </TouchableOpacity>
           </View>
 
@@ -224,25 +253,36 @@ const HomeScreen: React.FC = () => {
               No transactions yet
             </Text>
           )}
-        </View>
+        </Animated.View>
 
-        <View style={styles.sectionContainer}>
+        <Animated.View style={[styles.sectionContainer, { opacity: fadeAnim }]}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Spend Again</Text>
-            <TouchableOpacity 
-              onPress={() => router.push('/categories')}
-              accessibilityLabel="View all categories"
-            >
-              <Text style={styles.seeAllText}>See all</Text>
-            </TouchableOpacity>
+            <Text style={styles.sectionTitle}>Quick Actions</Text>
           </View>
 
-          <View style={styles.categoryRow}>
-            <CategoryItem title="Food" icon="utensils" />
-            <CategoryItem title="Transport" icon="bus" />
-            <CategoryItem title="Shopping" icon="shopping-bag" />
+          <View style={styles.categoryGrid}>
+            <CategoryItem 
+              title="Food" 
+              icon="utensils" 
+              onPress={() => router.push('/AddBudget')}
+            />
+            <CategoryItem 
+              title="Transport" 
+              icon="bus" 
+              onPress={() => router.push('/AddBudget')}
+            />
+            <CategoryItem 
+              title="Shopping" 
+              icon="shopping-bag" 
+              onPress={() => router.push('/AddBudget')}
+            />
+            <CategoryItem 
+              title="Housing" 
+              icon="home" 
+              onPress={() => router.push('/AddBudget')}
+            />
           </View>
-        </View>
+        </Animated.View>
       </ScrollView>
     </View>
   );
@@ -280,6 +320,7 @@ function getIconForTransaction(transaction: Transaction) {
     return require('@/assets/profile-avatar.png');
   }
 }
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -287,7 +328,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 100,
-    paddingHorizontal: 20,
   },
   backgroundContainer: {
     position: 'absolute',
@@ -305,30 +345,39 @@ const styles = StyleSheet.create({
   greetingContainer: {
     marginTop: height * 0.05,
     marginBottom: 20,
+    paddingHorizontal: 20,
   },
   greetingText: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '500',
-    color: '#343A40',
+    color: '#ffffff',
+    opacity: 0.9,
   },
   userName: {
     fontSize: 28,
     fontWeight: '700',
     color: '#ffffff',
   },
-  errorText: {
-    color: 'red',
-    fontSize: 14,
-  },
   balanceContainer: {
+    marginHorizontal: 20,
     marginTop: 20,
     backgroundColor: '#fff',
     padding: 20,
-    borderRadius: 15,
+    borderRadius: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 5,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  balanceHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  refreshButton: {
+    padding: 8,
   },
   sectionTitle: {
     fontSize: 18,
@@ -336,27 +385,40 @@ const styles = StyleSheet.create({
     color: '#343A40',
   },
   balanceAmount: {
-    fontSize: 32,
+    fontSize: 36,
     fontWeight: '700',
-    color: '#4CAF50',
+    color: '#4D9F8D',
     marginVertical: 10,
   },
   incomeExpenseRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    marginTop: 10,
   },
   financeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#F8F9FA',
-    padding: 10,
-    borderRadius: 10,
+    padding: 15,
+    borderRadius: 15,
     width: '48%',
+  },
+  financeIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#E8F5E9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
   financeLabel: {
     fontSize: 14,
     color: '#6C757D',
+    marginBottom: 4,
   },
   financeAmount: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
   },
   incomeText: {
@@ -366,64 +428,57 @@ const styles = StyleSheet.create({
     color: '#F44336',
   },
   sectionContainer: {
+    marginHorizontal: 20,
     marginTop: 20,
     backgroundColor: '#fff',
     padding: 20,
-    borderRadius: 15,
+    borderRadius: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 5,
+    shadowRadius: 8,
+    elevation: 5,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 15,
+  },
+  seeAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   seeAllText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#4CAF50',
-  },
-  categoryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 20,
-  },
-  categoryItem: {
-    width: '30%',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    padding: 15,
-    borderRadius: 15,
-    elevation: 2,
-  },
-  categoryText: {
-    marginTop: 10,
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#343A40',
+    color: '#4D9F8D',
+    marginRight: 4,
   },
   transactionItem: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 15,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#E1E1E1',
+    borderBottomColor: '#F0F0F0',
   },
-  transactionIcon: {
+  transactionIconContainer: {
     width: 40,
     height: 40,
     borderRadius: 20,
+    backgroundColor: '#F8F9FA',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
   transactionDetails: {
     flex: 1,
-    marginLeft: 10,
   },
   transactionName: {
     fontSize: 16,
     fontWeight: '500',
+    color: '#343A40',
+    marginBottom: 4,
   },
   transactionDate: {
     fontSize: 12,
@@ -433,16 +488,50 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  categoryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  categoryItem: {
+    width: '48%',
+    backgroundColor: '#F8F9FA',
+    padding: 15,
+    borderRadius: 15,
+    marginBottom: 15,
+    alignItems: 'center',
+  },
+  categoryIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#E8F5E9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  categoryText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#343A40',
+  },
   noTransactionsText: {
     textAlign: 'center',
     fontSize: 16,
     color: '#6C757D',
+    marginTop: 20,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#F5F5F5',
+  },
+  transactionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
   },
 });
 

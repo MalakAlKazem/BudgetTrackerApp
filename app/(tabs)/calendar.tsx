@@ -224,6 +224,21 @@ const handleAddNewExpense = () => {
             dayTextColor: darkText,
             monthTextColor: darkText,
             indicatorColor: primaryColor,
+            textDisabledColor: '#d9e1e8',
+            dotColor: primaryColor,
+            selectedDotColor: '#fff',
+            textSectionTitleColor: darkText,
+            textDayFontSize: 16,
+            textMonthFontSize: 18,
+            textDayHeaderFontSize: 14,
+            'stylesheet.calendar.header': {
+              dayTextAtIndex0: {
+                color: '#FF3B30'
+              },
+              dayTextAtIndex6: {
+                color: '#007AFF'
+              }
+            }
           }}
         />
       </View>
@@ -311,7 +326,7 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 3,
     marginBottom: 20,
-    marginTop: -110
+    marginTop: -60
   },
   calendar: {
     borderRadius: 12,

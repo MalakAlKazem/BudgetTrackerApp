@@ -67,12 +67,11 @@ function RootLayoutNav() {
 
   useEffect(() => {
     const inAuthGroup = segments[0] === '(tabs)' || segments[0] === 'settings_tabs';
+    const isTransactionsRoute = segments[0] === 'transactions';
 
-    if (!isAuthenticated && inAuthGroup) {
-      // Redirect to the login page if not authenticated and trying to access protected routes
+    if (!isAuthenticated && (inAuthGroup || isTransactionsRoute)) {
       router.replace('/');
-    } else if (isAuthenticated && !inAuthGroup) {
-      // Redirect to the home page if authenticated and trying to access auth pages
+    } else if (isAuthenticated && (!inAuthGroup && !isTransactionsRoute)) {
       router.replace('/(tabs)');
     }
   }, [isAuthenticated, segments]);
@@ -84,6 +83,7 @@ function RootLayoutNav() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="settings_tabs" options={{ headerShown: false }} />
         <Stack.Screen name="register" options={{ title: 'Register' }} />
+        <Stack.Screen name="transactions" options={{ title: 'All Transactions', headerShown: false }} />
         <Stack.Screen name="+not-found" />
       </Stack>
       <StatusBar style="auto" />
@@ -99,6 +99,7 @@ export default function RootLayout() {
   });
 
   const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
+  const [isDatabaseInitialized, setIsDatabaseInitialized] = useState(false);
 
   useEffect(() => {
     const checkOnboarding = async () => {
@@ -109,10 +110,15 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
+    if (!isDatabaseInitialized) {
+      setIsDatabaseInitialized(true);
+    }
+  }, [isDatabaseInitialized]);
+
+  useEffect(() => {
     const setup = async () => {
       try {
         await initDatabase();
-        console.log('Database initialized');
       } catch (e) {
         console.error('DB init error', e);
       }

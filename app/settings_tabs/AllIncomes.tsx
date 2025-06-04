@@ -28,7 +28,7 @@ const AllIncomes = () => {
         { text: "Cancel" },
         { 
           text: "Edit", 
-          onPress: () => console.log(`Editing income ${id}`) 
+          onPress: () => {} 
         }
       ]
     );

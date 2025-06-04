@@ -28,7 +28,7 @@ const AllExpanses = () => {
         { text: "Cancel" },
         {
           text: "Edit",
-          onPress: () => console.log(`Editing expense ${id}`)
+          onPress: () => {}
         }
       ]
     )

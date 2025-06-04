@@ -26,12 +26,13 @@ import { Category, useTransactions } from '../../context/TransactionContext';
 import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { insertTransaction } from '../../utils/database';
 import { useAuth } from '../../context/AuthContext';
+import { Button } from 'react-native-paper';
 
 const { width, height } = Dimensions.get('window');
 
 const AddBudget = () => {
   const router = useRouter();
-  const { addTransaction, categories, addCategory, refreshTransactions } = useTransactions();
+  const { addTransaction, categories, addCategory, refreshTransactions, transactions, updateTransaction } = useTransactions();
   const { user } = useAuth();
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
@@ -83,28 +84,56 @@ const AddBudget = () => {
     Keyboard.dismiss();
   };
 
-const { selectedDate } = useLocalSearchParams();
+const { selectedDate, transactionId } = useLocalSearchParams();
+
 useEffect(() => {
-  if (selectedDate && typeof selectedDate === 'string') {
-    console.log('Received selectedDate:', selectedDate); // Debug log
-    
-    // Fix: Parse the date string correctly to avoid timezone issues
+  if (transactionId && typeof transactionId === 'string' && transactions.length > 0) {
+    // Find the transaction to edit
+    const transactionToEdit = transactions.find(t => t.id === transactionId);
+
+    if (transactionToEdit) {
+      console.log('Found transaction to edit:', transactionToEdit); // Debug log
+      console.log('Available categories:', categories); // Debug log
+      
+      // Populate the form fields with the transaction data
+      setTitle(transactionToEdit.name || '');
+      setAmount(transactionToEdit.amount?.toString() || '');
+      setDate(transactionToEdit.date ? new Date(transactionToEdit.date) : new Date());
+      setType(transactionToEdit.type || 'expense');
+      setIsScheduled(!!transactionToEdit.isRecurring);
+      setInvoice(transactionToEdit.invoiceImage || null);
+
+      // Find and set the category object by name
+      if (transactionToEdit.category) {
+        const category = categories.find(cat => cat.name === transactionToEdit.category);
+        console.log('Found category:', category); // Debug log
+        if (category) {
+          setSelectedCategory(category);
+        } else {
+          // If category not found, try to find "Other" category
+          const otherCategory = categories.find(cat => cat.name === 'Other');
+          setSelectedCategory(otherCategory || null);
+        }
+      }
+    }
+  } else if (selectedDate && typeof selectedDate === 'string') {
+    // Existing logic for setting date from selectedDate params
     const [year, month, day] = selectedDate.split('-').map(Number);
-    const parsedDate = new Date(year, month - 1, day); // month is 0-indexed
-    
-    console.log('Parsed date:', parsedDate.toDateString()); // Debug log
+    const parsedDate = new Date(year, month - 1, day);
     setDate(parsedDate);
-    
-    // Auto-check scheduled if it's a future date
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     parsedDate.setHours(0, 0, 0, 0);
-    
+
     if (parsedDate > today) {
       setIsScheduled(true);
     }
+  } else {
+     // Clear form when no transactionId or selectedDate is present (for adding new)
+     clearFormCompletely();
   }
-}, [selectedDate]);
+}, [selectedDate, transactionId, transactions, categories]); // Add dependencies
 
 // Also update the handleDateChange function to ensure consistency:
 const handleDateChange = (selectedDate?: Date) => {
@@ -233,6 +262,54 @@ const handleDateChange = (selectedDate?: Date) => {
   };
 
   const filteredCategories = categories.filter(cat => cat.type === type || cat.type === 'both');
+
+  // Also update the handleSubmit function to handle updates
+  const handleUpdateTransaction = async () => {
+    if (!title || !amount || !selectedCategory || !transactionId || typeof transactionId !== 'string') {
+      Alert.alert('Error', 'Please fill in all fields and ensure transaction ID is present.');
+      return;
+    }
+
+    try {
+        setIsSubmitting(true);
+        const updatedTransactionData = {
+            id: transactionId as string,
+            name: title,
+            amount: parseFloat(amount),
+            type,
+            category: selectedCategory.name,
+            date: new Date(date),
+            isRecurring: isScheduled,
+            userId: user?.uid,
+            createdAt: new Date().toISOString(),
+            isPaid: !isScheduled,
+            recurrenceInterval: isScheduled ? 'monthly' : null,
+            invoiceImage: invoice
+        };
+
+        // Update the transaction using the context function
+        await updateTransaction(updatedTransactionData);
+        
+        Alert.alert('Success', 'Transaction updated successfully');
+        router.back();
+    } catch (error) {
+        console.error('Error updating transaction:', error);
+        Alert.alert('Error', 'Failed to update transaction');
+    } finally {
+        setIsSubmitting(false);
+    }
+  };
+
+  // Modify handleSubmit to call either add or update
+  const handleFinalSubmit = async () => {
+    if (transactionId) {
+        // If transactionId exists, call the update handler
+        handleUpdateTransaction();
+    } else {
+        // Otherwise, call the existing add handler
+        handleSubmit(); // This is your original handleSubmit function
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -386,25 +463,16 @@ const handleDateChange = (selectedDate?: Date) => {
               </View>
 
               {/* Submit Button */}
-              <TouchableOpacity 
-                style={[
-                  styles.addButton,
-                  (!title || !amount || isSubmitting) && styles.disabledButton
-                ]} 
-                onPress={() => {
-                  handleSubmit();
-                  clearFormCompletely();
-                }}
-                disabled={!title || !amount || isSubmitting}
+              <Button
+                mode="contained"
+                onPress={handleFinalSubmit}
+                loading={isSubmitting}
+                disabled={isSubmitting}
+                style={styles.addButton}
+                labelStyle={styles.addButtonLabel}
               >
-                {isSubmitting ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <Text style={styles.addButtonText}>
-                    {isScheduled ? 'Schedule Transaction' : 'Add Transaction'}
-                  </Text>
-                )}
-              </TouchableOpacity>
+                {transactionId ? 'Save Changes' : (isScheduled ? 'Schedule Transaction' : 'Add Transaction')}
+              </Button>
             </View>
           </TouchableWithoutFeedback>
         </ScrollView>
@@ -796,6 +864,10 @@ const styles = StyleSheet.create({
   },
   selectedIconItem: {
     backgroundColor: '#e0f2f1',
+  },
+  addButtonLabel: {
+    fontSize: 18,
+    fontWeight: 'bold',
   },
 });
 
