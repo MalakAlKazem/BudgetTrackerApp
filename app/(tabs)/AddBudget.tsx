@@ -84,7 +84,7 @@ const AddBudget = () => {
     Keyboard.dismiss();
   };
 
-const { selectedDate, transactionId } = useLocalSearchParams();
+const { selectedDate, transactionId, categoryName } = useLocalSearchParams();
 
 useEffect(() => {
   if (transactionId && typeof transactionId === 'string' && transactions.length > 0) {
@@ -129,11 +129,28 @@ useEffect(() => {
     if (parsedDate > today) {
       setIsScheduled(true);
     }
-  } else {
-     // Clear form when no transactionId or selectedDate is present (for adding new)
-     clearFormCompletely();
-  }
-}, [selectedDate, transactionId, transactions, categories]); // Add dependencies
+  }  // NEW: Handle category selection from HomeScreen
+    if (categoryName && typeof categoryName === 'string' && categories.length > 0) {
+      const category = categories.find(cat => 
+        cat.name.toLowerCase() === categoryName.toLowerCase()
+      );
+      
+      if (category) {
+        console.log('Pre-selecting category from HomeScreen:', category);
+        setSelectedCategory(category);
+        
+        // Set the type based on the category type if it's not 'both'
+        if (category.type === 'income' || category.type === 'expense') {
+          setType(category.type);
+        }
+      } else {
+        console.log('Category not found, available categories:', categories.map(c => c.name));
+      }
+    } 
+if (!transactionId && !selectedDate && !categoryName) {
+      clearFormCompletely();
+    }
+  }, [selectedDate, transactionId, categoryName, transactions, categories]); // Add dependencies
 
 // Also update the handleDateChange function to ensure consistency:
 const handleDateChange = (selectedDate?: Date) => {
