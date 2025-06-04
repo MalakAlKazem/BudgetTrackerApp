@@ -138,6 +138,16 @@ const HomeScreen: React.FC = () => {
       color: t.type === 'income' ? '#4CAF50' : '#F44336',
     }));
 
+    // Function to handle category selection and navigation
+  const handleCategoryPress = (categoryName: string, categoryIcon: string) => {
+    router.push({
+      pathname: '/AddBudget',
+      params: {
+        categoryName: categoryName,
+        selectedIcon: categoryIcon
+      }
+    });
+  };
   const renderItem: ListRenderItem<FormattedTransaction> = ({ item }) => (
     <TouchableOpacity style={styles.transactionItem}>
       <View style={styles.transactionIconContainer}>
@@ -258,28 +268,38 @@ const HomeScreen: React.FC = () => {
         <Animated.View style={[styles.sectionContainer, { opacity: fadeAnim }]}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Quick Actions</Text>
+             <TouchableOpacity 
+  onPress={() => {
+    console.log('Navigating to categories...');
+    router.push('/categories');
+  }}
+  style={styles.seeAllButton}
+>
+              <Text style={styles.seeAllText}>See all</Text>
+              <Ionicons name="chevron-forward" size={16} color="#4D9F8D" />
+            </TouchableOpacity>
           </View>
 
           <View style={styles.categoryGrid}>
             <CategoryItem 
               title="Food" 
               icon="utensils" 
-              onPress={() => router.push('/AddBudget')}
+              onPress={() => handleCategoryPress("Food", "utensils")}
             />
             <CategoryItem 
               title="Transport" 
               icon="bus" 
-              onPress={() => router.push('/AddBudget')}
+              onPress={() => handleCategoryPress("Transport", "bus")}
             />
             <CategoryItem 
               title="Shopping" 
               icon="shopping-bag" 
-              onPress={() => router.push('/AddBudget')}
+              onPress={() => handleCategoryPress("Shopping", "shopping-bag")}
             />
             <CategoryItem 
               title="Housing" 
               icon="home" 
-              onPress={() => router.push('/AddBudget')}
+              onPress={() => handleCategoryPress("Housing", "home")}
             />
           </View>
         </Animated.View>
