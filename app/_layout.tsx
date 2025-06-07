@@ -13,6 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TransactionProvider } from '../context/TransactionContext';
 import { initDatabase } from '../utils/database';
 import { AuthProvider, useAuth } from '../context/AuthContext';
+import { PaperProvider } from 'react-native-paper'; // ✅ Add this import
 
 const AppIntroSlider: any = require('react-native-app-intro-slider').default;
 
@@ -183,11 +184,13 @@ export default function RootLayout() {
   }
 
   return (
-    <AuthProvider>
-      <TransactionProvider>
-        <RootLayoutNav />
-      </TransactionProvider>
-    </AuthProvider>
+   <PaperProvider>
+      <AuthProvider>
+        <TransactionProvider>
+          <RootLayoutNav />
+        </TransactionProvider>
+      </AuthProvider>
+    </PaperProvider>
   );
 }
 
