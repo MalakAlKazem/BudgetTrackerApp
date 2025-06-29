@@ -40,8 +40,11 @@ interface FormattedTransaction {
   name: string;
   amount: string;
   date: string;
-  icon: any;
+  iconType: 'arrow' | 'image';
+  iconName?: string;
+  iconSource?: any;
   color: string;
+  backgroundColor: string;
 }
 
 const CategoryItem: React.FC<CategoryItemProps> = ({ title, icon, onPress }) => (
@@ -129,14 +132,20 @@ const HomeScreen: React.FC = () => {
     .slice()
     .sort((a, b) => b.date.getTime() - a.date.getTime())
     .slice(0, 4)
-    .map((t) => ({
-      id: t.id,
-      name: t.name || 'Unnamed Transaction',
-      amount: `${t.type === 'income' ? '+ ' : '- '}$${t.amount?.toFixed(2) || '0.00'}`,
-      date: formatDate(t.date),
-      icon: getIconForTransaction(t),
-      color: t.type === 'income' ? '#4CAF50' : '#F44336',
-    }));
+    .map((t) => {
+      const transactionIcon = getIconForTransaction(t);
+      return {
+        id: t.id,
+        name: t.name || 'Unnamed Transaction',
+        amount: `${t.type === 'income' ? '+ ' : '- '}$${t.amount?.toFixed(2) || '0.00'}`,
+        date: formatDate(t.date),
+        iconType: transactionIcon.type,
+        iconName: transactionIcon.iconName,
+        iconSource: transactionIcon.iconSource,
+        color: t.type === 'income' ? '#4CAF50' : '#F44336',
+        backgroundColor: t.type === 'income' ? '#E8F5E9' : '#FFF5F5',
+      };
+    });
 
     // Function to handle category selection and navigation
   const handleCategoryPress = (categoryName: string, categoryIcon: string) => {
@@ -150,12 +159,16 @@ const HomeScreen: React.FC = () => {
   };
   const renderItem: ListRenderItem<FormattedTransaction> = ({ item }) => (
     <TouchableOpacity style={styles.transactionItem}>
-      <View style={styles.transactionIconContainer}>
-        <Image 
-          source={item.icon} 
-          style={styles.transactionIcon} 
-          defaultSource={require('@/assets/profile-avatar.png')}
-        />
+      <View style={[styles.transactionIconContainer, { backgroundColor: item.backgroundColor }]}>
+        {item.iconType === 'arrow' ? (
+          <FontAwesome5 name={item.iconName!} size={20} color={item.color} />
+        ) : (
+          <Image 
+            source={item.iconSource} 
+            style={styles.transactionIcon} 
+            defaultSource={require('@/assets/profile-avatar.png')}
+          />
+        )}
       </View>
       <View style={styles.transactionDetails}>
         <Text style={styles.transactionName} numberOfLines={1} ellipsizeMode="tail">
@@ -327,17 +340,37 @@ function formatDate(date: Date): string {
 }
 
 function getIconForTransaction(transaction: Transaction) {
-  const lowerName = transaction.name?.toLowerCase() || ''; // Ensure name is defined
+  const lowerName = transaction.name?.toLowerCase() || '';
+  
+  // Check for specific service icons first
   if (lowerName.includes('upwork')) {
-    return require('@/assets/upwork.png');
+    return {
+      type: 'image' as const,
+      iconSource: require('@/assets/upwork.png')
+    };
   } else if (lowerName.includes('paypal')) {
-    return require('@/assets/paypal.png');
+    return {
+      type: 'image' as const,
+      iconSource: require('@/assets/paypal.png')
+    };
   } else if (lowerName.includes('youtube')) {
-    return require('@/assets/youtube.png');
-  } else if (transaction.type === 'income') {
-    return require('@/assets/transfer.png');
+    return {
+      type: 'image' as const,
+      iconSource: require('@/assets/youtube.png')
+    };
+  }
+  
+  // Default to arrows for income/expense
+  if (transaction.type === 'income') {
+    return {
+      type: 'arrow' as const,
+      iconName: 'arrow-up'
+    };
   } else {
-    return require('@/assets/profile-avatar.png');
+    return {
+      type: 'arrow' as const,
+      iconName: 'arrow-down'
+    };
   }
 }
 

@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "Budget-Tracker",
+    "name": "wafferFawaterak",
     "slug": "Budget-Tracker",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/money_icon.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -13,9 +13,10 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/images/money_icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.malakalkazem.BudgetTracker"
     },
     "web": {
       "bundler": "metro",
@@ -37,6 +38,14 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "592783c8-a2ec-4d9f-880d-78716eb5febb"
+      }
     }
   }
 }

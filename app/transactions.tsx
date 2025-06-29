@@ -67,28 +67,48 @@ const TransactionsScreen: React.FC = () => {
     setRefreshing(false);
   };
 
-  const getIconForTransaction = (transaction: any) => {
-    // First check if there's a category with an icon
-    if (transaction.category) {
-      const categoryInfo = getCategoryInfo(transaction.category);
-      if (categoryInfo) {
-        return categoryInfo.icon;
-      }
+ const getIconForTransaction = (transaction: any) => {
+  // Use category icons if available
+  if (transaction.category) {
+    const categoryInfo = getCategoryInfo(transaction.category);
+    if (categoryInfo && categoryInfo.icon) {
+      return {
+        icon: categoryInfo.icon,
+        color: "#4D9F8D"
+      };
     }
+  }
+
+  // For transactions without categories (unknown/uncategorized)
+  // Use colored arrows based on transaction type
+  return transaction.type === 'income' 
+    ? { icon: 'arrow-up', color: '#4CAF50' }    // Green up arrow for uncategorized income
+    : { icon: 'arrow-down', color: '#F44336' }; // Red down arrow for uncategorized expense
+};
 
 
-    // Fallback to name-based icons
-    const name = transaction.name?.toLowerCase() || '';
-    if (name.includes('upwork')) return require('@/assets/upwork.png');
-    if (name.includes('paypal')) return require('@/assets/paypal.png');
-    if (name.includes('youtube')) return require('@/assets/youtube.png');
-    if (name.includes('transfer')) return require('@/assets/transfer.png');
+
+    // // Fallback to name-based icons
+    // const name = transaction.name?.toLowerCase() || '';
+    // if (name.includes('upwork')) return require('@/assets/upwork.png');
+    // if (name.includes('paypal')) return require('@/assets/paypal.png');
+    // if (name.includes('youtube')) return require('@/assets/youtube.png');
+    // if (name.includes('transfer')) return require('@/assets/transfer.png');
     
-    // Default fallback
-    return transaction.type === 'income'
-      ? require('@/assets/transfer.png')
-      : require('@/assets/profile-avatar.png');
-  };
+ 
+const renderTransactionIcon = (transaction: any) => {
+  const iconData = getIconForTransaction(transaction);
+  
+  return (
+    <View style={styles.iconContainer}>
+      <FontAwesome5 
+        name={iconData.icon} 
+        size={20} 
+        color={iconData.color} 
+      />
+    </View>
+  );
+};
 
   const formatDate = (dateString: string | Date) => {
     const date = typeof dateString === 'string' ? new Date(dateString) : dateString;
@@ -143,26 +163,26 @@ const TransactionsScreen: React.FC = () => {
     }
   };
 
-  const renderTransactionIcon = (transaction: any) => {
-    const iconSource = getIconForTransaction(transaction);
+  // const renderTransactionIcon = (transaction: any) => {
+  //   const iconSource = getIconForTransaction(transaction);
     
-    // If it's a FontAwesome icon name (string), render FontAwesome5 component
-    if (typeof iconSource === 'string') {
-      return (
-        <View style={styles.iconContainer}>
-          <FontAwesome5 name={iconSource} size={20} color="#4D9F8D" />
-        </View>
-      );
-    }
+  //   // If it's a FontAwesome icon name (string), render FontAwesome5 component
+  //   if (typeof iconSource === 'string') {
+  //     return (
+  //       <View style={styles.iconContainer}>
+  //         <FontAwesome5 name={iconSource} size={20} color="#4D9F8D" />
+  //       </View>
+  //     );
+  //   }
     
-    // Otherwise render as Image
-    return (
-      <Image 
-        source={iconSource} 
-        style={styles.transactionIcon} 
-      />
-    );
-  };
+  //   // Otherwise render as Image
+  //   return (
+  //     <Image 
+  //       source={iconSource} 
+  //       style={styles.transactionIcon} 
+  //     />
+  //   );
+  // };
 
   // Add handleEditTransaction function
   const handleEditTransaction = (transactionId: string) => {

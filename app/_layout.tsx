@@ -85,7 +85,7 @@ function RootLayoutNav() {
       <Stack>
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="settings_tabs" options={{ headerShown: false }} />
+        {/* <Stack.Screen name="settings_tabs" options={{ headerShown: false }} /> */}
         <Stack.Screen name="register" options={{ title: 'Register' }} />
         <Stack.Screen name="transactions" options={{ title: 'All Transactions', headerShown: false }} />
         <Stack.Screen name="categories" options={{ title: 'All Categories', headerShown: false }} />

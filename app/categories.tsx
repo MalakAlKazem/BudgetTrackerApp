@@ -19,7 +19,7 @@ import transactions from './transactions'; // Ensure transactions is exported as
 const { width } = Dimensions.get('window');
 
 const CategoriesScreen = () => {
-  const { transactions,categories, addCategory, deleteCategory, getDefaultCategories } = useTransactions();
+  const { transactions,categories, addCategory } = useTransactions();
   const [newCategory, setNewCategory] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -63,26 +63,26 @@ const CategoriesScreen = () => {
     }
   };
 
-  const handleDeleteCategory = async (category: Category) => {
-    Alert.alert(
-      'Delete Category',
-      `Are you sure you want to delete "${category.name}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteCategory(category.id);
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete category');
-            }
-          }
-        },
-      ]
-    );
-  };
+  // const handleDeleteCategory = async (category: Category) => {
+  //   Alert.alert(
+  //     'Delete Category',
+  //     `Are you sure you want to delete "${category.name}"?`,
+  //     [
+  //       { text: 'Cancel', style: 'cancel' },
+  //       { 
+  //         text: 'Delete', 
+  //         style: 'destructive',
+  //         onPress: async () => {
+  //           try {
+  //             await deleteCategory(category.id);
+  //           } catch (error) {
+  //             Alert.alert('Error', 'Failed to delete category');
+  //           }
+  //         }
+  //       },
+  //     ]
+  //   );
+  // };
 
   const categoryItem = ({ item }: { item: Category }) => (
   <TouchableOpacity 
@@ -109,15 +109,14 @@ const CategoriesScreen = () => {
   {transactions.filter(t => t.category === item.name).length}
       </Text>
       
-      <TouchableOpacity 
+      {/* <TouchableOpacity 
         style={styles.deleteButton}
         onPress={(e) => {
           e.stopPropagation(); // Prevent navigation when deleting
-          handleDeleteCategory(item);
         }}
       >
         <Ionicons name="trash-outline" size={20} color="#FF6B6B" />
-      </TouchableOpacity>
+      </TouchableOpacity> */}
     </View>
   </TouchableOpacity>
 );
@@ -351,9 +350,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginLeft: 10,
   },
-  deleteButton: {
-    padding: 8,
-  },
+  // deleteButton: {
+  //   padding: 8,
+  // },
   categoryActions: {
     flexDirection: 'row',
     alignItems: 'center',
